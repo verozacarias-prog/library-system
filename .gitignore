@@ -1,0 +1,13 @@
+# Go binary
+loans-service/loans-service
+
+# Environment
+.env
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.cursor/
+*.idea/

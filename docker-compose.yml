@@ -1,0 +1,50 @@
+services:
+  library-service:
+    build: ./library-service
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-library:5432/library_db
+      - LOANS_SERVICE_URL=http://loans-service:8081
+    depends_on:
+      - postgres-library
+    networks:
+      - library-network
+
+  loans-service:
+    build: ./loans-service
+    ports:
+      - "8081:8081"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-loans:5432/loans_db
+      - LIBRARY_SERVICE_URL=http://library-service:3000
+    depends_on:
+      - postgres-loans
+    networks:
+      - library-network
+
+  postgres-library:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=library_db
+    ports:
+      - "5432:5432"
+    networks:
+      - library-network
+
+  postgres-loans:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=loans_db
+    ports:
+      - "5433:5432"
+    networks:
+      - library-network
+
+networks:
+  library-network:
+    driver: bridge
