@@ -19,7 +19,8 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres-loans:5432/loans_db
       - LIBRARY_SERVICE_URL=http://library-service:3000
     depends_on:
-      - postgres-loans
+      postgres-loans:
+        condition: service_healthy
     networks:
       - library-network
 
@@ -42,6 +43,13 @@ services:
       - POSTGRES_DB=loans_db
     ports:
       - "5433:5432"
+    volumes:
+      - ./loans-service/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - library-network
 
