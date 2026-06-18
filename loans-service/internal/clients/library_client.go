@@ -1,4 +1,4 @@
-package service
+package clients
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-
 	"strings"
 
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"

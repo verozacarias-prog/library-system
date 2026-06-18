@@ -7,6 +7,11 @@ import (
 	"github.com/verozacarias-prog/library-system/loans-service/internal/repository"
 )
 
+type BookService interface {
+	ValidateBook(ctx context.Context, bookID int) (*model.Book, error)
+	UpdateCopies(ctx context.Context, bookID int, action string) error
+}
+
 type LoanService struct {
 	repo *repository.LoanRepository
 }
