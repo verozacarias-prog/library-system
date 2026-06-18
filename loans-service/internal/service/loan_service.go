@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
-	"github.com/verozacarias-prog/library-system/loans-service/internal/repository"
 )
 
 type BookService interface {
@@ -13,12 +12,19 @@ type BookService interface {
 	UpdateCopies(ctx context.Context, bookID int, action string) error
 }
 
+type LoanRepository interface {
+	Create(ctx context.Context, req model.CreateLoanRequest) (*model.Loan, error)
+	UpdateStatus(ctx context.Context, loanID int, status string) (*model.Loan, error)
+	GetActiveByUser(ctx context.Context, userID int) ([]model.Loan, error)
+	GetHistoryByUser(ctx context.Context, userID int) ([]model.Loan, error)
+}
+
 type LoanService struct {
-	repository    *repository.LoanRepository
+	repository    LoanRepository
 	libraryClient BookService
 }
 
-func NewLoanService(repo *repository.LoanRepository, libraryClient BookService) *LoanService {
+func NewLoanService(repo LoanRepository, libraryClient BookService) *LoanService {
 	return &LoanService{
 		repository:    repo,
 		libraryClient: libraryClient,

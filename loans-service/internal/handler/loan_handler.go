@@ -1,20 +1,27 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
-	"github.com/verozacarias-prog/library-system/loans-service/internal/service"
 )
 
-type LoanHandler struct {
-	service *service.LoanService
+type LoanService interface {
+	CreateLoan(ctx context.Context, req model.CreateLoanRequest) (*model.Loan, error)
+	BookReturned(ctx context.Context, loanID int) (*model.Loan, error)
+	GetActiveLoans(ctx context.Context, userID int) ([]model.Loan, error)
+	GetLoanHistory(ctx context.Context, userID int) ([]model.Loan, error)
 }
 
-func NewLoanHandler(svc *service.LoanService) *LoanHandler {
+type LoanHandler struct {
+	service LoanService
+}
+
+func NewLoanHandler(svc LoanService) *LoanHandler {
 	return &LoanHandler{service: svc}
 }
 
