@@ -2,6 +2,8 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } f
 import { BooksService } from './books.service';
 import { Book } from './book.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 
 @Controller('books')
@@ -9,7 +11,8 @@ export class BooksController {
     constructor(private readonly booksService: BooksService) { }
 
     @Post()
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     create(@Body() data: Partial<Book>) {
         return this.booksService.create(data);
     }
@@ -35,19 +38,22 @@ export class BooksController {
     }
 
     @Patch(':id')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     update(@Param('id') id: string, @Body() data: Partial<Book>) {
         return this.booksService.update(Number(id), data);
     }
 
     @Delete(':id')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     remove(@Param('id') id: string) {
         return this.booksService.remove(Number(id));
     }
 
     @Patch(':id/copies')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     updateCopies(@Param('id') id: string, @Body('delta') delta: number) {
         return this.booksService.updateCopies(Number(id), delta);
     }
