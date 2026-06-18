@@ -5,22 +5,26 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/repository"
+	"github.com/verozacarias-prog/library-system/loans-service/internal/service"
 )
 
 type App struct {
-	Pool           *pgxpool.Pool
-	LoanRepository *repository.LoanRepository
+	Pool        *pgxpool.Pool
+	LoanService *service.LoanService
 }
 
-func New(ctx context.Context) (*App, error) {
+func New(ctx context.Context, libraryClient service.BookService) (*App, error) {
 	pool, err := repository.NewPool(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	repository := repository.NewLoanRepository(pool)
+	svc := service.NewLoanService(repository, libraryClient)
+
 	return &App{
-		Pool:           pool,
-		LoanRepository: repository.NewLoanRepository(pool),
+		Pool:        pool,
+		LoanService: svc,
 	}, nil
 }
 

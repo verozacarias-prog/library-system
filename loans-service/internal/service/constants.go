@@ -1,4 +1,4 @@
-package loans
+package service
 
 // Loan status
 const (
