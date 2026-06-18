@@ -61,19 +61,70 @@ LIBRARY_SERVICE_URL=http://localhost:3000
 
 ## Example Flow
 
+### 1. Register a user
+
+```bash
+curl -X POST http://localhost:3000/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Verónica", "email": "vero@test.com", "password": "secret123", "role": "admin"}'
 ```
-1. Register user:       POST /users         { name, email, password }
-2. Login:              POST /auth/login     { email, password } → access_token
-3. Create book (admin): POST /books          { title, author, isbn, year, genre, availableCopies }
-4. List books:          GET  /books?author=Borges&page=1&limit=10
-5. Create loan:         POST /loans          { userId, bookId }
-   → loans-service validates book exists and has copies available via GET /books/:id
-   → if valid, registers loan and decrements copies via PATCH /books/:id/copies
-6. Return book:         PATCH /loans/:id     { } (no body needed)
-   → loans-service updates loan status to "returned"
-   → increments available copies via PATCH /books/:id/copies
-7. View active loans:   GET  /loans/users/:id
-8. View history:        GET  /loans/users/:id/history
+
+### 2. Login
+
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "vero@test.com", "password": "secret123"}'
+```
+
+Response:
+```json
+{ "access_token": "eyJhbGci..." }
+```
+
+### 3. Create a book (admin only)
+
+```bash
+curl -X POST http://localhost:3000/books \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "availableCopies": 3}'
+```
+
+### 4. List books with filters and pagination
+
+```bash
+curl "http://localhost:3000/books?author=Martin&genre=tech&available=true&page=1&limit=10"
+```
+
+### 5. Create a loan
+
+```bash
+curl -X POST http://localhost:8081/loans \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 1, "book_id": 1}'
+```
+
+loans-service validates with library-service that the book exists and has available copies, then decrements the count.
+
+### 6. Return a book
+
+```bash
+curl -X PATCH http://localhost:8081/loans/1
+```
+
+loans-service updates the loan status to `returned` and increments the available copies in library-service.
+
+### 7. View active loans for a user
+
+```bash
+curl http://localhost:8081/loans/users/1
+```
+
+### 8. View loan history
+
+```bash
+curl http://localhost:8081/loans/users/1/history
 ```
 
 ---
@@ -109,6 +160,9 @@ CREATE UNIQUE INDEX ON loans(user_id, book_id) WHERE status = 'active';
 ```
 A user cannot have the same book twice on active loan simultaneously. Once returned, they can borrow it again. A simple UNIQUE constraint would prevent that.
 
+**PATCH /loans/:id for returns**
+Instead of a `/loans/:id/return` verb-in-URL pattern, a `PATCH /loans/:id` was used. The service layer method `BookReturned` always sets the status to `returned` — the status is a consequence of the operation, not an input from the client.
+
 ---
 
 ### library-service (NestJS)
@@ -125,6 +179,9 @@ TypeORM automatically creates/updates tables based on entity definitions. Approp
 **JWT with Passport**
 `@nestjs/passport` + `passport-jwt` is the standard NestJS authentication pattern. The `JwtStrategy` validates the token from the `Authorization: Bearer` header. `JwtAuthGuard` is applied per-endpoint with `@UseGuards()`.
 
+**Role-based access control with custom decorator + guard**
+`@Roles('admin')` decorator stores metadata on the endpoint. `RolesGuard` reads that metadata via `Reflector` and compares it against the role in the JWT payload. Endpoints without `@Roles` are accessible to any authenticated user.
+
 **Passwords hashed with bcrypt (salt rounds: 10)**
 Passwords are never stored or returned in plain text. The `Omit<User, 'password'>` TypeScript type ensures the password field is excluded at the type level from all service responses.
 
@@ -133,19 +190,32 @@ Passwords are never stored or returned in plain text. The `Omit<User, 'password'
 
 ---
 
-## What's pending
+## Testing
 
-- [ ] Role-based guards (admin vs regular user)
-- [ ] Tests for library-service (3-4 required)
-- [ ] README complete example with curl commands
-- [ ] `.env.example` file
+```bash
+# loans-service
+cd loans-service
+go test ./internal/service/...
+go test ./internal/handler/...
+
+# library-service
+cd library-service
+npm test
+```
+
+**loans-service:** 6 unit tests — service layer (CreateLoan happy path, book not available, BookReturned, GetActiveLoans) and handler layer (CreateLoan 201, invalid body 400). Mocks used for repository and LibraryClient — no database required.
+
+**library-service:** 6 unit tests — BooksService (create, findOne not found, updateCopies) and AuthService (valid login, user not found, wrong password). Mocks used for TypeORM repository and JwtService.
+
+---
 
 ## What was intentionally left out
 
-- gRPC between services: HTTP was kept for simplicity and consistency. gRPC would be the natural next step to reduce inter-service latency.
-- Rate limiting: out of scope for this assessment.
-- Frontend: explicitly excluded by the assessment.
-- Kubernetes / service mesh: explicitly excluded by the assessment.
+- **gRPC between services:** HTTP was kept for simplicity and consistency. gRPC would be the natural next step to reduce inter-service latency.
+- **Rate limiting:** out of scope for this assessment.
+- **Frontend:** explicitly excluded by the assessment.
+- **Kubernetes / service mesh:** explicitly excluded by the assessment.
+- **Repository integration tests:** require a running database instance. Prioritized unit tests for business logic coverage.
 
 ---
 
@@ -161,6 +231,7 @@ library-system/
 │   │   │   ├── book.entity.ts
 │   │   │   ├── books.module.ts
 │   │   │   ├── books.service.ts
+│   │   │   ├── books.service.spec.ts
 │   │   │   └── books.controller.ts
 │   │   ├── users/
 │   │   │   ├── user.entity.ts
@@ -170,30 +241,37 @@ library-system/
 │   │   └── auth/
 │   │       ├── auth.module.ts
 │   │       ├── auth.service.ts
+│   │       ├── auth.service.spec.ts
 │   │       ├── auth.controller.ts
 │   │       ├── jwt.strategy.ts
-│   │       └── jwt-auth.guard.ts
+│   │       ├── jwt-auth.guard.ts
+│   │       ├── roles.guard.ts
+│   │       └── roles.decorator.ts
 │   └── Dockerfile
 └── loans-service/                # Go — loans management
     ├── cmd/api/main.go
     ├── internal/
-    │   ├── app.go                # factory / dependency wiring
-    │   ├── constants.go          # domain constants
+    │   ├── app.go
+    │   ├── constants.go
     │   ├── clients/
-    │   │   ├── library_client.go # HTTP client for library-service
+    │   │   ├── library_client.go
     │   │   └── errors.go
     │   ├── handler/
     │   │   ├── loan_handler.go
+    │   │   ├── loan_handler_test.go
+    │   │   ├── mocks_test.go
     │   │   ├── routes.go
     │   │   └── errors.go
     │   ├── service/
-    │   │   ├── loan_service.go   # BookServiceClient interface defined here
-    │   │   ├── library_client.go # concrete implementation
+    │   │   ├── loan_service.go
+    │   │   ├── loan_service_test.go
+    │   │   ├── mocks_test.go
+    │   │   ├── library_client.go
     │   │   └── errors.go
     │   ├── repository/
     │   │   ├── loan_repository.go
     │   │   ├── db.go
-    │   │   ├── constants.go      # SQL queries
+    │   │   ├── constants.go
     │   │   └── errors.go
     │   └── model/
     │       ├── loan.go
@@ -201,4 +279,3 @@ library-system/
     ├── db/schema.sql
     ├── Dockerfile
     └── go.mod
-```
