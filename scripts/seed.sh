@@ -45,7 +45,7 @@ echo "Libro 2: $BOOK2" | jq .
 BOOK3=$(curl -s -X POST $BASE/books \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"title": "Sapiens", "author": "Yuval Noah Harari", "isbn": "9780062316097", "year": 2011, "genre": "history", "available_copies": 5}')
+  -d '{"title": "Sapiens", "author": "Yuval Noah Harari", "isbn": "9780062316097", "year": 2011, "genre": "history", "available_copies": 4}')
 echo "Libro 3: $BOOK3" | jq .
 
 BOOK4=$(curl -s -X POST $BASE/books \

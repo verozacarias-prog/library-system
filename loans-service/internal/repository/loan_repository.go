@@ -62,6 +62,9 @@ func (r *LoanRepository) GetActiveByUser(ctx context.Context, userID int) ([]mod
 		}
 		loans = append(loans, l)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return loans, nil
 }
 
@@ -80,15 +83,18 @@ func (r *LoanRepository) GetHistoryByUser(ctx context.Context, userID int) ([]mo
 		}
 		loans = append(loans, l)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return loans, nil
 }
 
 func (r *LoanRepository) GetByID(ctx context.Context, loanID int) (*model.Loan, error) {
-    loan := &model.Loan{}
-    err := r.pool.QueryRow(ctx, QueryGetByID, loanID).
-        Scan(&loan.ID, &loan.UserID, &loan.BookID, &loan.LoanedAt, &loan.ReturnedAt, &loan.Status)
-    if errors.Is(err, pgx.ErrNoRows) {
-        return nil, ErrLoanNotFound
-    }
-    return loan, err
+	loan := &model.Loan{}
+	err := r.pool.QueryRow(ctx, QueryGetByID, loanID).
+		Scan(&loan.ID, &loan.UserID, &loan.BookID, &loan.LoanedAt, &loan.ReturnedAt, &loan.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrLoanNotFound
+	}
+	return loan, err
 }

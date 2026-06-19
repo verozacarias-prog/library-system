@@ -28,12 +28,12 @@ func NewLoanHandler(svc LoanService) *LoanHandler {
 func (h *LoanHandler) CreateLoan(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateLoanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, ErrInvalidRequestBody.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, ErrInvalidRequestBody.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if req.UserID <= 0 || req.BookID <= 0 {
-		http.Error(w, ErrInvalidUserOrBookID.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, ErrInvalidUserOrBookID.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -51,7 +51,7 @@ func (h *LoanHandler) CreateLoan(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) ReturnLoan(w http.ResponseWriter, r *http.Request) {
 	loanID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
-		http.Error(w, ErrInvalidLoanID.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, ErrInvalidLoanID.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *LoanHandler) ReturnLoan(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) GetActiveLoans(w http.ResponseWriter, r *http.Request) {
 	userID, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
-		http.Error(w, ErrInvalidUserID.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, ErrInvalidUserID.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *LoanHandler) GetActiveLoans(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) GetLoanHistory(w http.ResponseWriter, r *http.Request) {
 	userID, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
-		http.Error(w, ErrInvalidUserID.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, ErrInvalidUserID.Error(), http.StatusBadRequest)
 		return
 	}
 

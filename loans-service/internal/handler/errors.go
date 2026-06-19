@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -15,17 +16,23 @@ var (
 	ErrInvalidUserOrBookID = errors.New("user_id and book_id must be positive integers")
 )
 
+func writeErrorJSON(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, service.ErrBookNotFound):
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeErrorJSON(w, err.Error(), http.StatusNotFound)
 	case errors.Is(err, service.ErrNoCopiesAvailable):
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeErrorJSON(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, repository.ErrLoanNotFound):
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeErrorJSON(w, err.Error(), http.StatusNotFound)
 	case errors.Is(err, repository.ErrLoanAlreadyActive):
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeErrorJSON(w, err.Error(), http.StatusConflict)
 	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 	}
 }

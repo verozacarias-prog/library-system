@@ -1,4 +1,3 @@
-
 === AUTH ===
 --- Error: password incorrecto (401) ---
 {
@@ -134,7 +133,7 @@
             "isbn": "9780062316097",
             "year": 2011,
             "genre": "history",
-            "available_copies": 4
+            "available_copies": 3
         },
         {
             "id": 1,
@@ -181,7 +180,7 @@
 {
     "id": 3,
     "title": "Sapiens",
-    "available_copies": 4
+    "available_copies": 3
 }
 {
     "id": 1,
@@ -291,32 +290,28 @@
     "id": 4,
     "user_id": 1,
     "book_id": 2,
-    "loaned_at": "2026-06-19T20:55:34.493699Z",
+    "loaned_at": "2026-06-19T22:56:18.962123Z",
     "status": "active"
 }
 
 --- Error: préstamo duplicado - mismo user y libro activo (409) ---
 {
-    "statusCode": 409,
-    "message": "user already has an active loan for this book\n"
+    "error": "user already has an active loan for this book"
 }
 
 --- Error: libro que no existe (404) ---
 {
-    "statusCode": 404,
-    "message": "book not found\n"
+    "error": "book not found"
 }
 
 --- Error: user_id o book_id inválido (400) ---
 {
-    "statusCode": 400,
-    "message": "user_id and book_id must be positive integers\n"
+    "error": "user_id and book_id must be positive integers"
 }
 
 --- Error: body inválido (400) ---
 {
-    "statusCode": 400,
-    "message": "user_id and book_id must be positive integers\n"
+    "error": "user_id and book_id must be positive integers"
 }
 
 --- Error: sin token (401) ---
@@ -338,14 +333,14 @@
         "id": 1,
         "user_id": 1,
         "book_id": 1,
-        "loaned_at": "2026-06-19T20:50:31.735745Z",
+        "loaned_at": "2026-06-19T22:53:37.584483Z",
         "status": "active"
     },
     {
         "id": 4,
         "user_id": 1,
         "book_id": 2,
-        "loaned_at": "2026-06-19T20:55:34.493699Z",
+        "loaned_at": "2026-06-19T22:56:18.962123Z",
         "status": "active"
     }
 ]
@@ -356,19 +351,19 @@
         "id": 4,
         "user_id": 1,
         "book_id": 2,
-        "loaned_at": "2026-06-19T20:55:34.493699Z",
+        "loaned_at": "2026-06-19T22:56:18.962123Z",
         "status": "active"
     },
     {
         "id": 1,
         "user_id": 1,
         "book_id": 1,
-        "loaned_at": "2026-06-19T20:50:31.735745Z",
+        "loaned_at": "2026-06-19T22:53:37.584483Z",
         "status": "active"
     }
 ]
 
---- Error: sin token en loans (401) ---
+--- Error: sin token en loans by user (401) ---
 {
     "message": "Unauthorized",
     "statusCode": 401
@@ -379,21 +374,19 @@
     "id": 1,
     "user_id": 1,
     "book_id": 1,
-    "loaned_at": "2026-06-19T20:50:31.735745Z",
-    "returned_at": "2026-06-19T20:55:34.828958Z",
+    "loaned_at": "2026-06-19T22:53:37.584483Z",
+    "returned_at": "2026-06-19T22:56:19.296635Z",
     "status": "returned"
 }
 
 --- Error: devolver préstamo ya devuelto (404) ---
 {
-    "statusCode": 500,
-    "message": "loan inactive\n"
+    "error": "loan inactive"
 }
 
 --- Error: préstamo que no existe (404) ---
 {
-    "statusCode": 404,
-    "message": "loan not found or already returned\n"
+    "error": "loan not found or already returned"
 }
 
 --- Verificar copias restauradas libro 1 ---
@@ -409,15 +402,15 @@
         "id": 4,
         "user_id": 1,
         "book_id": 2,
-        "loaned_at": "2026-06-19T20:55:34.493699Z",
+        "loaned_at": "2026-06-19T22:56:18.962123Z",
         "status": "active"
     },
     {
         "id": 1,
         "user_id": 1,
         "book_id": 1,
-        "loaned_at": "2026-06-19T20:50:31.735745Z",
-        "returned_at": "2026-06-19T20:55:34.828958Z",
+        "loaned_at": "2026-06-19T22:53:37.584483Z",
+        "returned_at": "2026-06-19T22:56:19.296635Z",
         "status": "returned"
     }
 ]
@@ -427,19 +420,20 @@
     "id": 6,
     "user_id": 1,
     "book_id": 1,
-    "loaned_at": "2026-06-19T20:55:34.985415Z",
+    "loaned_at": "2026-06-19T22:56:19.443599Z",
     "status": "active"
 }
 
 === VALIDACIÓN DE COPIAS ===
---- Setup: ver copias disponibles libro 3 ---
+
+--- Agotar copias libro 3 (4 copias, user 3 ya tiene 1 activo, pedir 3 más con users existentes) ---
+--- Verificar copias iniciales de libro 3 ---
 {
     "id": 3,
     "title": "Sapiens",
-    "available_copies": 4
+    "available_copies": 3
 }
 
---- Agotar copias libro 3 (4 copias, user 3 ya tiene 1 activo, pedir 3 más con users existentes) ---
 {
     "id": 7,
     "status": "active"
@@ -458,21 +452,20 @@ Usuario temporal creado con id: 4
 {
     "id": 3,
     "title": "Sapiens",
-    "available_copies": 1
+    "available_copies": 0
 }
 
 --- Error: sin copias disponibles con usuario existente (409) ---
 {
-    "statusCode": 409,
-    "message": "user already has an active loan for this book\n"
+    "error": "no copies available"
 }
 
 --- Trade-off documentado: usuario inexistente igual crea préstamo ---
 {
-    "id": 11,
+    "id": 10,
     "user_id": 9999,
     "book_id": 2,
-    "loaned_at": "2026-06-19T20:55:35.378984Z",
+    "loaned_at": "2026-06-19T22:56:19.825284Z",
     "status": "active"
 }
 ^ Esto crea el préstamo porque loans-service no valida existencia del usuario (ver README - What was intentionally left out)

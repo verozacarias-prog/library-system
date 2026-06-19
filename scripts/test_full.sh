@@ -244,7 +244,7 @@ curl -s $BASE/loans/users/1/history \
   -H "Authorization: Bearer $TOKEN" | jq
 echo ""
 
-echo "--- Error: sin token en loans (401) ---"
+echo "--- Error: sin token en loans by user (401) ---"
 curl -s $BASE/loans/users/1 | jq
 echo ""
 
@@ -281,11 +281,12 @@ echo ""
 
 echo "=== VALIDACIÓN DE COPIAS ==="
 
-echo "--- Setup: ver copias disponibles libro 3 ---"
+echo "--- Agotar copias libro 3 (4 copias, user 3 ya tiene 1 activo, pedir 3 más con users existentes) ---"
+
+echo "--- Verificar copias iniciales de libro 3 ---"
 curl -s http://localhost:3000/books/3 | jq '{id, title, available_copies}'
 echo ""
 
-echo "--- Agotar copias libro 3 (4 copias, user 3 ya tiene 1 activo, pedir 3 más con users existentes) ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
