@@ -62,7 +62,7 @@ func (s *LoanService) BookReturned(ctx context.Context, loanID int) (*model.Loan
 		return nil, err
 	}
 
-	if err := s.libraryClient.UpdateCopies(ctx, loan.BookID, "increment"); err != nil {
+	if err := s.libraryClient.UpdateCopies(ctx, loan.BookID, CopiesActionIncrement); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUpdateCopies, err)
 	}
 
