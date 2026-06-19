@@ -3,14 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
-	"github.com/verozacarias-prog/library-system/loans-service/internal/repository"
-	"github.com/verozacarias-prog/library-system/loans-service/internal/service"
 )
 
 type LoanService interface {
@@ -36,7 +33,7 @@ func (h *LoanHandler) CreateLoan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.UserID <= 0 || req.BookID <= 0 {
-		http.Error(w, "user_id and book_id must be positive integers", http.StatusBadRequest)
+		http.Error(w, ErrInvalidUserOrBookID.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -100,19 +97,6 @@ func (h *LoanHandler) GetLoanHistory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(loans)
-}
-
-func writeServiceError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, service.ErrBookNotFound):
-		http.Error(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, service.ErrNoCopiesAvailable):
-		http.Error(w, err.Error(), http.StatusConflict)
-	case errors.Is(err, repository.ErrLoanNotFound):
-		http.Error(w, err.Error(), http.StatusNotFound)
-	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 func Health(w http.ResponseWriter, r *http.Request) {

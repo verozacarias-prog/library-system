@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/verozacarias-prog/library-system/loans-service/internal/clients"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
 )
 
@@ -33,7 +35,14 @@ func NewLoanService(repo LoanRepository, libraryClient BookService) *LoanService
 
 func (s *LoanService) CreateLoan(ctx context.Context, req model.CreateLoanRequest) (*model.Loan, error) {
 	if _, err := s.libraryClient.ValidateBook(ctx, req.BookID); err != nil {
-		return nil, err
+		switch {
+		case errors.Is(err, clients.ErrBookNotFound):
+			return nil, ErrBookNotFound
+		case errors.Is(err, clients.ErrNoCopiesAvailable):
+			return nil, ErrNoCopiesAvailable
+		default:
+			return nil, ErrLibraryServiceUnavailable
+		}
 	}
 
 	loan, err := s.repository.Create(ctx, req)
