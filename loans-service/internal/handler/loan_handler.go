@@ -32,9 +32,14 @@ func (h *LoanHandler) CreateLoan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.UserID <= 0 || req.BookID <= 0 {
+		http.Error(w, ErrInvalidUserOrBookID.Error(), http.StatusBadRequest)
+		return
+	}
+
 	loan, err := h.service.CreateLoan(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -52,7 +57,7 @@ func (h *LoanHandler) ReturnLoan(w http.ResponseWriter, r *http.Request) {
 
 	loan, err := h.service.BookReturned(r.Context(), loanID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -69,7 +74,7 @@ func (h *LoanHandler) GetActiveLoans(w http.ResponseWriter, r *http.Request) {
 
 	loans, err := h.service.GetActiveLoans(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -86,7 +91,7 @@ func (h *LoanHandler) GetLoanHistory(w http.ResponseWriter, r *http.Request) {
 
 	loans, err := h.service.GetLoanHistory(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 

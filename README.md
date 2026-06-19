@@ -9,16 +9,18 @@ Two independent services communicating via HTTP:
 ```
 Client
   │
-  ▼
-library-service (NestJS) ──HTTP──▶ loans-service (Go)
-  │                                      │
+  ▼ (all requests, including loans)
+library-service (NestJS, port 3000)
+  │  ├─ manages books, users, auth
+  │  └─────────── HTTP ──────────▶ loans-service (Go, port 8081)
+  │                                      │  └─ manages loan records
   ▼                                      ▼
 postgres-library                   postgres-loans
 ```
 
-**library-service** (Port 3000) — main service exposed to the client. Manages books, users and authentication.
+**library-service** (Port 3000) — single entry point for all clients. Manages books, users, authentication, and proxies loan operations to loans-service.
 
-**loans-service** (Port 8081) — manages loans. Validates book availability with library-service before registering a loan.
+**loans-service** (Port 8081) — internal service, not directly exposed to clients. Manages loan records and validates book availability by calling library-service.
 
 Each service has its own PostgreSQL database — separation of concerns at the data level.
 
@@ -53,6 +55,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/library_db
 LOANS_SERVICE_URL=http://localhost:8081
 JWT_SECRET=your_secret_here
 LIBRARY_SERVICE_URL=http://localhost:3000
+PORT=3000
 ```
 
 > **Note:** JWT_SECRET must never be hardcoded in production. Use a secrets manager or external environment variable injection.
@@ -88,7 +91,7 @@ Response:
 curl -X POST http://localhost:3000/books \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "availableCopies": 3}'
+  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "available_copies": 3}'
 ```
 
 ### 4. List books with filters and pagination
@@ -100,17 +103,19 @@ curl "http://localhost:3000/books?author=Martin&genre=tech&available=true&page=1
 ### 5. Create a loan
 
 ```bash
-curl -X POST http://localhost:8081/loans \
+curl -X POST http://localhost:3000/loans \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{"user_id": 1, "book_id": 1}'
 ```
 
-loans-service validates with library-service that the book exists and has available copies, then decrements the count.
+library-service forwards the request to loans-service, which validates book availability with library-service before persisting the loan.
 
 ### 6. Return a book
 
 ```bash
-curl -X PATCH http://localhost:8081/loans/1
+curl -X PATCH http://localhost:3000/loans/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 loans-service updates the loan status to `returned` and increments the available copies in library-service.
@@ -118,13 +123,15 @@ loans-service updates the loan status to `returned` and increments the available
 ### 7. View active loans for a user
 
 ```bash
-curl http://localhost:8081/loans/users/1
+curl http://localhost:3000/loans/users/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### 8. View loan history
 
 ```bash
-curl http://localhost:8081/loans/users/1/history
+curl http://localhost:3000/loans/users/1/history \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ---
@@ -174,13 +181,16 @@ TypeORM is more mature for complex relational mappings and has better TypeScript
 Instead of listing every entity in `TypeOrmModule.forRoot()`, each module registers its own entity with `forFeature()`. Scales better as the number of entities grows.
 
 **synchronize: true**
-TypeORM automatically creates/updates tables based on entity definitions. Appropriate for development and this assessment. In production, use migrations.
+TypeORM automatically creates/updates tables based on entity definitions. Appropriate for development and this assessment. In production, use migrations (`typeorm migration:generate` + `typeorm migration:run`).
 
 **JWT with Passport**
 `@nestjs/passport` + `passport-jwt` is the standard NestJS authentication pattern. The `JwtStrategy` validates the token from the `Authorization: Bearer` header. `JwtAuthGuard` is applied per-endpoint with `@UseGuards()`.
 
 **Role-based access control with custom decorator + guard**
-`@Roles('admin')` decorator stores metadata on the endpoint. `RolesGuard` reads that metadata via `Reflector` and compares it against the role in the JWT payload. Endpoints without `@Roles` are accessible to any authenticated user.
+`@Roles('admin')` decorator stores metadata on the endpoint. `RolesGuard` reads that metadata via `Reflector` and compares it against the role in the JWT payload. Endpoints without `@Roles` are accessible to any authenticated user. Only admins can change a user's role via `PATCH /users/:id`.
+
+**Input validation with class-validator**
+All endpoints use typed DTOs with `class-validator` decorators. A global `ValidationPipe` (whitelist + forbidNonWhitelisted) is applied in `main.ts`, rejecting unknown fields and validating types at the boundary.
 
 **Passwords hashed with bcrypt (salt rounds: 10)**
 Passwords are never stored or returned in plain text. The `Omit<User, 'password'>` TypeScript type ensures the password field is excluded at the type level from all service responses.
@@ -212,6 +222,8 @@ npm test
 ## What was intentionally left out
 
 - **gRPC between services:** HTTP was kept for simplicity and consistency. gRPC would be the natural next step to reduce inter-service latency.
+- **TypeORM migrations:** `synchronize: true` is used for this assessment. In production, replace with `typeorm migration:generate` + `typeorm migration:run` to get versioned, reversible schema changes.
+- **User existence validation in loans-service:** loans-service does not call library-service to verify that the userId is valid before creating a loan. A dedicated `/users/:id` validation call could be added, but adds latency for the common path.
 - **Rate limiting:** out of scope for this assessment.
 - **Frontend:** explicitly excluded by the assessment.
 - **Kubernetes / service mesh:** explicitly excluded by the assessment.
@@ -225,19 +237,28 @@ npm test
 library-system/
 ├── docker-compose.yml
 ├── .env.example
-├── library-service/              # NestJS — books, users, auth
+├── library-service/              # NestJS — books, users, auth, loans proxy
 │   ├── src/
 │   │   ├── books/
 │   │   │   ├── book.entity.ts
 │   │   │   ├── books.module.ts
 │   │   │   ├── books.service.ts
 │   │   │   ├── books.service.spec.ts
-│   │   │   └── books.controller.ts
+│   │   │   ├── books.controller.ts
+│   │   │   └── dto/
+│   │   │       ├── create-book.dto.ts
+│   │   │       └── update-book.dto.ts
 │   │   ├── users/
 │   │   │   ├── user.entity.ts
 │   │   │   ├── users.module.ts
 │   │   │   ├── users.service.ts
-│   │   │   └── users.controller.ts
+│   │   │   ├── users.controller.ts
+│   │   │   └── dto/
+│   │   │       ├── create-user.dto.ts
+│   │   │       └── update-user.dto.ts
+│   │   ├── loans/                    # proxy to loans-service
+│   │   │   ├── loans.module.ts
+│   │   │   └── loans.controller.ts
 │   │   └── auth/
 │   │       ├── auth.module.ts
 │   │       ├── auth.service.ts
@@ -279,3 +300,4 @@ library-system/
     ├── db/schema.sql
     ├── Dockerfile
     └── go.mod
+```

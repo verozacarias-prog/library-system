@@ -21,5 +21,5 @@ export class Book {
     genre: string;
 
     @Column({ name: 'available_copies', default: 1 })
-    availableCopies: number;
+    available_copies: number;
 }

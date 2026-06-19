@@ -1,16 +1,18 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Request, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Controller('users')
 export class UsersController {
     constructor(private readonly usersService: UsersService) { }
 
     @Post()
-    create(@Body() data: { name: string; email: string; password: string; role?: string }) {
+    create(@Body() data: CreateUserDto) {
         return this.usersService.create(data);
     }
 
@@ -29,7 +31,10 @@ export class UsersController {
 
     @Patch(':id')
     @UseGuards(JwtAuthGuard)
-    update(@Param('id') id: string, @Body() data: any) {
+    update(@Param('id') id: string, @Body() data: UpdateUserDto, @Request() req) {
+        if (data.role !== undefined && req.user.role !== 'admin') {
+            throw new ForbiddenException('Only admins can change roles');
+        }
         return this.usersService.update(Number(id), data);
     }
 

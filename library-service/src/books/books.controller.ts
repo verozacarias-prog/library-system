@@ -1,9 +1,10 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { BooksService } from './books.service';
-import { Book } from './book.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CreateBookDto } from './dto/create-book.dto';
+import { UpdateBookDto } from './dto/update-book.dto';
 
 
 @Controller('books')
@@ -13,7 +14,7 @@ export class BooksController {
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('admin')
-    create(@Body() data: Partial<Book>) {
+    create(@Body() data: CreateBookDto) {
         return this.booksService.create(data);
     }
 
@@ -40,7 +41,7 @@ export class BooksController {
     @Patch(':id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('admin')
-    update(@Param('id') id: string, @Body() data: Partial<Book>) {
+    update(@Param('id') id: string, @Body() data: UpdateBookDto) {
         return this.booksService.update(Number(id), data);
     }
 
@@ -52,8 +53,6 @@ export class BooksController {
     }
 
     @Patch(':id/copies')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('admin')
     updateCopies(@Param('id') id: string, @Body('delta') delta: number) {
         return this.booksService.updateCopies(Number(id), delta);
     }

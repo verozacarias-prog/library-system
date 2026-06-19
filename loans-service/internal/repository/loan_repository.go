@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
 )
@@ -31,6 +33,9 @@ func (r *LoanRepository) UpdateStatus(ctx context.Context, loanID int, status st
 		QueryUpdateStatus,
 		status, time.Now(), loanID,
 	).Scan(&loan.ID, &loan.UserID, &loan.BookID, &loan.LoanedAt, &loan.ReturnedAt, &loan.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrLoanNotFound
+	}
 	return loan, err
 }
 
