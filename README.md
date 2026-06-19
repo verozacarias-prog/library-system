@@ -46,8 +46,6 @@ This starts 4 containers: library-service, loans-service, postgres-library, post
 
 The loans-service waits for postgres-loans to be healthy before starting (via Docker healthcheck).
 
-The library-service waits for postgres-library to be healthy before starting (via Docker healthcheck).
-
 The loans schema is applied automatically on first run from `loans-service/db/schema.sql`.
 
 ### Environment variables
@@ -440,11 +438,35 @@ npm test
 
 ---
 
+## Role permissions
+
+| Action | admin | user |
+|--------|-------|------|
+| Register account | ✅ | ✅ |
+| Login | ✅ | ✅ |
+| List books / Get book | ✅ | ✅ |
+| Create / Update / Delete book | ✅ | ❌ |
+| List all users | ✅ | ❌ |
+| Get / Update own user | ✅ | ✅ |
+| Change a user's role | ✅ | ❌ |
+| Delete user | ✅ | ❌ |
+| Create loan | ✅ | ✅ |
+| Return book | ✅ | ✅ |
+| View active loans for a user | ✅ | ✅ |
+| View loan history for a user | ✅ | ✅ |
+
+The assessment specifies "read and their loans" for regular users. This was interpreted as: any authenticated user can manage loans (create and return), since a borrowing system where only admins can register loans would not be functional for end users. Loan endpoints do not restrict by role — only by authentication.
+
+**Suggested improvement:** `GET /loans/users/:userId` currently allows any authenticated user to view another user's loans. A natural next step would be to restrict this so regular users can only query their own loans (validating that `:userId` matches the `sub` from the JWT), while admins retain access to any user's loans.
+
+---
+
 ## What was intentionally left out
 
 - **gRPC between services:** HTTP was kept for simplicity and consistency. gRPC would be the natural next step to reduce inter-service latency.
 - **TypeORM migrations:** `synchronize: true` is used for this assessment. In production, replace with `typeorm migration:generate` + `typeorm migration:run` to get versioned, reversible schema changes.
 - **User existence validation in loans-service:** loans-service does not call library-service to verify that the userId is valid before creating a loan. A dedicated `/users/:id` validation call could be added, but adds latency for the common path.
+- **Loan access restriction by ownership:** any authenticated user can currently view any other user's loans. Restricting `GET /loans/users/:userId` to the owner (or admin) is a straightforward improvement not implemented in this version.
 - **Rate limiting:** out of scope for this assessment.
 - **Frontend:** explicitly excluded by the assessment.
 - **Kubernetes / service mesh:** explicitly excluded by the assessment.

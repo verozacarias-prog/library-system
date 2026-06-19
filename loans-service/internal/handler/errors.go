@@ -23,6 +23,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, repository.ErrLoanNotFound):
 		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, repository.ErrLoanAlreadyActive):
+		http.Error(w, err.Error(), http.StatusConflict)
 	default:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
