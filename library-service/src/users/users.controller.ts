@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Request, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -31,7 +31,10 @@ export class UsersController {
 
     @Patch(':id')
     @UseGuards(JwtAuthGuard)
-    update(@Param('id') id: string, @Body() data: UpdateUserDto) {
+    update(@Param('id') id: string, @Body() data: UpdateUserDto, @Request() req) {
+        if (data.role !== undefined && req.user.role !== 'admin') {
+            throw new ForbiddenException('Only admins can change roles');
+        }
         return this.usersService.update(Number(id), data);
     }
 

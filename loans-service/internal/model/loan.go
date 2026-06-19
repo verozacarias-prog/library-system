@@ -13,7 +13,7 @@ type Loan struct {
 
 type Book struct {
 	ID              int `json:"id"`
-	AvailableCopies int `json:"availableCopies"`
+	AvailableCopies int `json:"available_copies"`
 }
 
 type CreateLoanRequest struct {

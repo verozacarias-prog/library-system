@@ -55,6 +55,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/library_db
 LOANS_SERVICE_URL=http://localhost:8081
 JWT_SECRET=your_secret_here
 LIBRARY_SERVICE_URL=http://localhost:3000
+PORT=3000
 ```
 
 > **Note:** JWT_SECRET must never be hardcoded in production. Use a secrets manager or external environment variable injection.
@@ -90,7 +91,7 @@ Response:
 curl -X POST http://localhost:3000/books \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "availableCopies": 3}'
+  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "available_copies": 3}'
 ```
 
 ### 4. List books with filters and pagination
@@ -180,13 +181,16 @@ TypeORM is more mature for complex relational mappings and has better TypeScript
 Instead of listing every entity in `TypeOrmModule.forRoot()`, each module registers its own entity with `forFeature()`. Scales better as the number of entities grows.
 
 **synchronize: true**
-TypeORM automatically creates/updates tables based on entity definitions. Appropriate for development and this assessment. In production, use migrations.
+TypeORM automatically creates/updates tables based on entity definitions. Appropriate for development and this assessment. In production, use migrations (`typeorm migration:generate` + `typeorm migration:run`).
 
 **JWT with Passport**
 `@nestjs/passport` + `passport-jwt` is the standard NestJS authentication pattern. The `JwtStrategy` validates the token from the `Authorization: Bearer` header. `JwtAuthGuard` is applied per-endpoint with `@UseGuards()`.
 
 **Role-based access control with custom decorator + guard**
-`@Roles('admin')` decorator stores metadata on the endpoint. `RolesGuard` reads that metadata via `Reflector` and compares it against the role in the JWT payload. Endpoints without `@Roles` are accessible to any authenticated user.
+`@Roles('admin')` decorator stores metadata on the endpoint. `RolesGuard` reads that metadata via `Reflector` and compares it against the role in the JWT payload. Endpoints without `@Roles` are accessible to any authenticated user. Only admins can change a user's role via `PATCH /users/:id`.
+
+**Input validation with class-validator**
+All endpoints use typed DTOs with `class-validator` decorators. A global `ValidationPipe` (whitelist + forbidNonWhitelisted) is applied in `main.ts`, rejecting unknown fields and validating types at the boundary.
 
 **Passwords hashed with bcrypt (salt rounds: 10)**
 Passwords are never stored or returned in plain text. The `Omit<User, 'password'>` TypeScript type ensures the password field is excluded at the type level from all service responses.
@@ -219,7 +223,7 @@ npm test
 
 - **gRPC between services:** HTTP was kept for simplicity and consistency. gRPC would be the natural next step to reduce inter-service latency.
 - **TypeORM migrations:** `synchronize: true` is used for this assessment. In production, replace with `typeorm migration:generate` + `typeorm migration:run` to get versioned, reversible schema changes.
-- **User existence validation in loans-service:** loans-service does not call library-service to verify that the userId is a valid user before creating a loan. A dedicated `/users/:id` validation call could be added, but adds latency for the common path.
+- **User existence validation in loans-service:** loans-service does not call library-service to verify that the userId is valid before creating a loan. A dedicated `/users/:id` validation call could be added, but adds latency for the common path.
 - **Rate limiting:** out of scope for this assessment.
 - **Frontend:** explicitly excluded by the assessment.
 - **Kubernetes / service mesh:** explicitly excluded by the assessment.
@@ -233,7 +237,7 @@ npm test
 library-system/
 ├── docker-compose.yml
 ├── .env.example
-├── library-service/              # NestJS — books, users, auth
+├── library-service/              # NestJS — books, users, auth, loans proxy
 │   ├── src/
 │   │   ├── books/
 │   │   │   ├── book.entity.ts
@@ -296,3 +300,4 @@ library-system/
     ├── db/schema.sql
     ├── Dockerfile
     └── go.mod
+```

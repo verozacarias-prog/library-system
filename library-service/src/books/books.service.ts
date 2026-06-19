@@ -47,7 +47,7 @@ export class BooksService {
 
     async updateCopies(id: number, delta: number): Promise<Book> {
         const book = await this.findOne(id);
-        book.availableCopies += delta;
+        book.available_copies += delta;
         return this.bookRepository.save(book);
     }
 }

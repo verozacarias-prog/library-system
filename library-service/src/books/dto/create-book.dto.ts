@@ -20,8 +20,7 @@ export class CreateBookDto {
     @IsNotEmpty()
     genre: string;
 
-    @IsOptional()
     @IsInt()
     @Min(0)
-    availableCopies?: number;
+    available_copies: number;
 }
