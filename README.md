@@ -9,16 +9,18 @@ Two independent services communicating via HTTP:
 ```
 Client
   │
-  ▼
-library-service (NestJS) ──HTTP──▶ loans-service (Go)
-  │                                      │
+  ▼ (all requests, including loans)
+library-service (NestJS, port 3000)
+  │  ├─ manages books, users, auth
+  │  └─────────── HTTP ──────────▶ loans-service (Go, port 8081)
+  │                                      │  └─ manages loan records
   ▼                                      ▼
 postgres-library                   postgres-loans
 ```
 
-**library-service** (Port 3000) — main service exposed to the client. Manages books, users and authentication.
+**library-service** (Port 3000) — single entry point for all clients. Manages books, users, authentication, and proxies loan operations to loans-service.
 
-**loans-service** (Port 8081) — manages loans. Validates book availability with library-service before registering a loan.
+**loans-service** (Port 8081) — internal service, not directly exposed to clients. Manages loan records and validates book availability by calling library-service.
 
 Each service has its own PostgreSQL database — separation of concerns at the data level.
 
@@ -100,17 +102,19 @@ curl "http://localhost:3000/books?author=Martin&genre=tech&available=true&page=1
 ### 5. Create a loan
 
 ```bash
-curl -X POST http://localhost:8081/loans \
+curl -X POST http://localhost:3000/loans \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{"user_id": 1, "book_id": 1}'
 ```
 
-loans-service validates with library-service that the book exists and has available copies, then decrements the count.
+library-service forwards the request to loans-service, which validates book availability with library-service before persisting the loan.
 
 ### 6. Return a book
 
 ```bash
-curl -X PATCH http://localhost:8081/loans/1
+curl -X PATCH http://localhost:3000/loans/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 loans-service updates the loan status to `returned` and increments the available copies in library-service.
@@ -118,13 +122,15 @@ loans-service updates the loan status to `returned` and increments the available
 ### 7. View active loans for a user
 
 ```bash
-curl http://localhost:8081/loans/users/1
+curl http://localhost:3000/loans/users/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### 8. View loan history
 
 ```bash
-curl http://localhost:8081/loans/users/1/history
+curl http://localhost:3000/loans/users/1/history \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ---
@@ -212,6 +218,8 @@ npm test
 ## What was intentionally left out
 
 - **gRPC between services:** HTTP was kept for simplicity and consistency. gRPC would be the natural next step to reduce inter-service latency.
+- **TypeORM migrations:** `synchronize: true` is used for this assessment. In production, replace with `typeorm migration:generate` + `typeorm migration:run` to get versioned, reversible schema changes.
+- **User existence validation in loans-service:** loans-service does not call library-service to verify that the userId is a valid user before creating a loan. A dedicated `/users/:id` validation call could be added, but adds latency for the common path.
 - **Rate limiting:** out of scope for this assessment.
 - **Frontend:** explicitly excluded by the assessment.
 - **Kubernetes / service mesh:** explicitly excluded by the assessment.
@@ -232,12 +240,21 @@ library-system/
 │   │   │   ├── books.module.ts
 │   │   │   ├── books.service.ts
 │   │   │   ├── books.service.spec.ts
-│   │   │   └── books.controller.ts
+│   │   │   ├── books.controller.ts
+│   │   │   └── dto/
+│   │   │       ├── create-book.dto.ts
+│   │   │       └── update-book.dto.ts
 │   │   ├── users/
 │   │   │   ├── user.entity.ts
 │   │   │   ├── users.module.ts
 │   │   │   ├── users.service.ts
-│   │   │   └── users.controller.ts
+│   │   │   ├── users.controller.ts
+│   │   │   └── dto/
+│   │   │       ├── create-user.dto.ts
+│   │   │       └── update-user.dto.ts
+│   │   ├── loans/                    # proxy to loans-service
+│   │   │   ├── loans.module.ts
+│   │   │   └── loans.controller.ts
 │   │   └── auth/
 │   │       ├── auth.module.ts
 │   │       ├── auth.service.ts

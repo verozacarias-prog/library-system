@@ -3,11 +3,14 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
+	"github.com/verozacarias-prog/library-system/loans-service/internal/repository"
+	"github.com/verozacarias-prog/library-system/loans-service/internal/service"
 )
 
 type LoanService interface {
@@ -32,9 +35,14 @@ func (h *LoanHandler) CreateLoan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.UserID <= 0 || req.BookID <= 0 {
+		http.Error(w, "user_id and book_id must be positive integers", http.StatusBadRequest)
+		return
+	}
+
 	loan, err := h.service.CreateLoan(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -52,7 +60,7 @@ func (h *LoanHandler) ReturnLoan(w http.ResponseWriter, r *http.Request) {
 
 	loan, err := h.service.BookReturned(r.Context(), loanID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -69,7 +77,7 @@ func (h *LoanHandler) GetActiveLoans(w http.ResponseWriter, r *http.Request) {
 
 	loans, err := h.service.GetActiveLoans(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -86,12 +94,25 @@ func (h *LoanHandler) GetLoanHistory(w http.ResponseWriter, r *http.Request) {
 
 	loans, err := h.service.GetLoanHistory(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(loans)
+}
+
+func writeServiceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, service.ErrBookNotFound):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, service.ErrNoCopiesAvailable):
+		http.Error(w, err.Error(), http.StatusConflict)
+	case errors.Is(err, repository.ErrLoanNotFound):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	default:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func Health(w http.ResponseWriter, r *http.Request) {

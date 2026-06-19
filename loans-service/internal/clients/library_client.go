@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
 )
@@ -19,7 +20,7 @@ type LibraryClient struct {
 func NewLibraryClient() *LibraryClient {
 	return &LibraryClient{
 		baseURL:    os.Getenv("LIBRARY_SERVICE_URL"),
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -56,7 +57,11 @@ func (c *LibraryClient) ValidateBook(ctx context.Context, bookID int) (*model.Bo
 }
 
 func (c *LibraryClient) UpdateCopies(ctx context.Context, bookID int, action string) error {
-	body := fmt.Sprintf(`{"action":"%s"}`, action)
+	delta := -1
+	if action == "increment" {
+		delta = 1
+	}
+	body := fmt.Sprintf(`{"delta":%d}`, delta)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
 		fmt.Sprintf("%s/books/%d/copies", c.baseURL, bookID),
 		strings.NewReader(body))
