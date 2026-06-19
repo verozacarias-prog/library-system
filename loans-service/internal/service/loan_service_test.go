@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/verozacarias-prog/library-system/loans-service/internal/clients"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/service"
 )
 
-
 func TestCreateLoan_HappyPath(t *testing.T) {
 	ctx := context.Background()
-	
+
 	mockClient := &mockLibraryClient{}
 	mockRepo := &mockLoanRepository{}
 	svc := service.NewLoanService(mockRepo, mockClient)
@@ -42,7 +42,7 @@ func TestCreateLoan_BookNotAvailable(t *testing.T) {
 
 	req := model.CreateLoanRequest{UserID: 1, BookID: 1}
 
-	mockClient.On("ValidateBook", ctx, 1).Return(nil, service.ErrNoCopiesAvailable)
+	mockClient.On("ValidateBook", ctx, 1).Return(nil, clients.ErrNoCopiesAvailable)
 
 	loan, err := svc.CreateLoan(ctx, req)
 
@@ -59,10 +59,12 @@ func TestBookReturned_HappyPath(t *testing.T) {
 	mockRepo := &mockLoanRepository{}
 	svc := service.NewLoanService(mockRepo, mockClient)
 
-	expectedLoan := &model.Loan{ID: 1, UserID: 1, BookID: 2, Status: service.StatusReturned}
+	activeLoan := &model.Loan{ID: 1, UserID: 1, BookID: 2, Status: service.StatusActive}
+	returnedLoan := &model.Loan{ID: 1, UserID: 1, BookID: 2, Status: service.StatusReturned}
 
-	mockRepo.On("UpdateStatus", ctx, 1, service.StatusReturned).Return(expectedLoan, nil)
+	mockRepo.On("GetByID", ctx, 1).Return(activeLoan, nil)
 	mockClient.On("UpdateCopies", ctx, 2, service.CopiesActionIncrement).Return(nil)
+	mockRepo.On("UpdateStatus", ctx, 1, service.StatusReturned).Return(returnedLoan, nil)
 
 	loan, err := svc.BookReturned(ctx, 1)
 

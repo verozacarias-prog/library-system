@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/verozacarias-prog/library-system/loans-service/internal/clients"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
@@ -16,6 +15,7 @@ type BookService interface {
 
 type LoanRepository interface {
 	Create(ctx context.Context, req model.CreateLoanRequest) (*model.Loan, error)
+	GetByID(ctx context.Context, loanID int) (*model.Loan, error)
 	UpdateStatus(ctx context.Context, loanID int, status string) (*model.Loan, error)
 	GetActiveByUser(ctx context.Context, userID int) ([]model.Loan, error)
 	GetHistoryByUser(ctx context.Context, userID int) ([]model.Loan, error)
@@ -45,28 +45,39 @@ func (s *LoanService) CreateLoan(ctx context.Context, req model.CreateLoanReques
 		}
 	}
 
-	loan, err := s.repository.Create(ctx, req)
-	if err != nil {
-		return nil, err
+	if err := s.libraryClient.UpdateCopies(ctx, req.BookID, CopiesActionDecrement); err != nil {
+		return nil, ErrLibraryServiceUnavailable
 	}
 
-	if err := s.libraryClient.UpdateCopies(ctx, req.BookID, CopiesActionDecrement); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrUpdateCopies, err)
+	loan, err := s.repository.Create(ctx, req)
+	if err != nil {
+		s.libraryClient.UpdateCopies(ctx, req.BookID, CopiesActionIncrement) // revertir
+		return nil, err
 	}
 	return loan, nil
 }
 
 func (s *LoanService) BookReturned(ctx context.Context, loanID int) (*model.Loan, error) {
-	loan, err := s.repository.UpdateStatus(ctx, loanID, StatusReturned)
+	loan, err := s.repository.GetByID(ctx, loanID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.libraryClient.UpdateCopies(ctx, loan.BookID, CopiesActionIncrement); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrUpdateCopies, err)
+	if loan.Status != StatusActive {
+		return nil, ErrLoanInactive
 	}
 
-	return loan, nil
+	if err := s.libraryClient.UpdateCopies(ctx, loan.BookID, CopiesActionIncrement); err != nil {
+		return nil, ErrLibraryServiceUnavailable
+	}
+
+	returned, err := s.repository.UpdateStatus(ctx, loanID, StatusReturned)
+	if err != nil {
+		s.libraryClient.UpdateCopies(ctx, loan.BookID, CopiesActionDecrement)
+		return nil, err
+	}
+
+	return returned, nil
 }
 
 func (s *LoanService) GetActiveLoans(ctx context.Context, userID int) ([]model.Loan, error) {

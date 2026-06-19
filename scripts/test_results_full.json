@@ -1,0 +1,483 @@
+
+=== AUTH ===
+--- Error: password incorrecto (401) ---
+{
+    "message": "Invalid credentials",
+    "error": "Unauthorized",
+    "statusCode": 401
+}
+
+--- Error: usuario no existe (401) ---
+{
+    "message": "Invalid credentials",
+    "error": "Unauthorized",
+    "statusCode": 401
+}
+
+--- Error: email faltante (400) ---
+{
+    "message": [
+        "email must be an email"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+--- Error: password faltante (400) ---
+{
+    "message": [
+        "password should not be empty",
+        "password must be a string"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+=== REGISTER USER ===
+--- Error: email inválido (400) ---
+{
+    "message": [
+        "email must be an email"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+--- Error: password muy corto (400) ---
+{
+    "message": [
+        "password must be longer than or equal to 8 characters"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+--- Error: email duplicado (409) ---
+{
+    "message": "Email already registered",
+    "error": "Conflict",
+    "statusCode": 409
+}
+
+--- Error: rol inválido (400) ---
+{
+    "message": [
+        "role must be one of the following values: user, admin"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+--- Error: nombre faltante (400) ---
+{
+    "message": [
+        "name should not be empty",
+        "name must be a string"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+=== GET USERS ===
+--- Caso feliz: admin lista todos los usuarios ---
+[
+    {
+        "id": 1,
+        "name": "Verónica Zacarias",
+        "email": "vero@test.com",
+        "role": "admin"
+    },
+    {
+        "id": 3,
+        "name": "Lector Actualizado",
+        "email": "lector@test.com",
+        "role": "user"
+    }
+]
+
+--- Error: usuario normal lista usuarios (403) ---
+{
+    "message": "You do not have permission to perform this action",
+    "error": "Forbidden",
+    "statusCode": 403
+}
+
+--- Error: sin token (401) ---
+{
+    "message": "Unauthorized",
+    "statusCode": 401
+}
+
+--- Caso feliz: obtener usuario por id ---
+{
+    "id": 1,
+    "name": "Verónica Zacarias",
+    "email": "vero@test.com",
+    "role": "admin"
+}
+
+--- Error: usuario que no existe (404) ---
+{
+    "message": "User 9999 not found",
+    "error": "Not Found",
+    "statusCode": 404
+}
+
+=== GET BOOKS ===
+--- Caso feliz: listar todos sin filtros ---
+{
+    "data": [
+        {
+            "id": 3,
+            "title": "Sapiens",
+            "author": "Yuval Noah Harari",
+            "isbn": "9780062316097",
+            "year": 2011,
+            "genre": "history",
+            "available_copies": 4
+        },
+        {
+            "id": 1,
+            "title": "Clean Code - Updated Edition",
+            "author": "Robert Martin",
+            "isbn": "9780132350884",
+            "year": 2008,
+            "genre": "tech",
+            "available_copies": 2
+        },
+        {
+            "id": 2,
+            "title": "The Pragmatic Programmer",
+            "author": "David Thomas",
+            "isbn": "9780135957059",
+            "year": 2019,
+            "genre": "tech",
+            "available_copies": 10
+        }
+    ],
+    "total": 3
+}
+
+--- Caso feliz: filtrar por autor ---
+{
+    "id": 1,
+    "title": "Clean Code - Updated Edition",
+    "author": "Robert Martin"
+}
+
+--- Caso feliz: filtrar por género ---
+{
+    "id": 1,
+    "title": "Clean Code - Updated Edition",
+    "genre": "tech"
+}
+{
+    "id": 2,
+    "title": "The Pragmatic Programmer",
+    "genre": "tech"
+}
+
+--- Caso feliz: filtrar por disponibilidad ---
+{
+    "id": 3,
+    "title": "Sapiens",
+    "available_copies": 4
+}
+{
+    "id": 1,
+    "title": "Clean Code - Updated Edition",
+    "available_copies": 2
+}
+{
+    "id": 2,
+    "title": "The Pragmatic Programmer",
+    "available_copies": 10
+}
+
+--- Caso feliz: paginación página 1 con limit 2 ---
+{
+    "total": 3,
+    "count": 2
+}
+
+--- Caso feliz: paginación página 2 con limit 2 ---
+{
+    "total": 3,
+    "count": 1
+}
+
+--- Caso feliz: filtros combinados ---
+{
+    "id": 1,
+    "title": "Clean Code - Updated Edition"
+}
+
+--- Caso feliz: obtener libro por id ---
+{
+    "id": 1,
+    "title": "Clean Code - Updated Edition",
+    "author": "Robert Martin",
+    "isbn": "9780132350884",
+    "year": 2008,
+    "genre": "tech",
+    "available_copies": 2
+}
+
+--- Error: libro que no existe (404) ---
+{
+    "message": "Book 9999 not found",
+    "error": "Not Found",
+    "statusCode": 404
+}
+
+=== CREATE BOOK - validaciones ===
+--- Error: ISBN inválido (400) ---
+{
+    "message": [
+        "isbn must be an ISBN"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+--- Error: año futuro (400) ---
+{
+    "message": [
+        "isbn must be an ISBN",
+        "year must not be greater than 2026"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+--- Error: copias 0 en creación (400) ---
+{
+    "message": [
+        "isbn must be an ISBN",
+        "available_copies must not be less than 1"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+--- Error: ISBN duplicado (409) ---
+{
+    "message": "Book with ISBN 9780132350884 already exists",
+    "error": "Conflict",
+    "statusCode": 409
+}
+
+--- Error: campos faltantes (400) ---
+{
+    "message": [
+        "author should not be empty",
+        "author must be a string",
+        "isbn must be an ISBN",
+        "year must not be greater than 2026",
+        "year must not be less than 1450",
+        "year must be an integer number",
+        "genre should not be empty",
+        "genre must be a string",
+        "available_copies must not be less than 1",
+        "available_copies must be an integer number"
+    ],
+    "error": "Bad Request",
+    "statusCode": 400
+}
+
+=== LOANS ===
+--- Caso feliz: crear préstamo (libro 2, user 1) ---
+{
+    "id": 4,
+    "user_id": 1,
+    "book_id": 2,
+    "loaned_at": "2026-06-19T20:55:34.493699Z",
+    "status": "active"
+}
+
+--- Error: préstamo duplicado - mismo user y libro activo (409) ---
+{
+    "statusCode": 409,
+    "message": "user already has an active loan for this book\n"
+}
+
+--- Error: libro que no existe (404) ---
+{
+    "statusCode": 404,
+    "message": "book not found\n"
+}
+
+--- Error: user_id o book_id inválido (400) ---
+{
+    "statusCode": 400,
+    "message": "user_id and book_id must be positive integers\n"
+}
+
+--- Error: body inválido (400) ---
+{
+    "statusCode": 400,
+    "message": "user_id and book_id must be positive integers\n"
+}
+
+--- Error: sin token (401) ---
+{
+    "message": "Unauthorized",
+    "statusCode": 401
+}
+
+--- Verificar copias decrementadas libro 2 ---
+{
+    "id": 2,
+    "title": "The Pragmatic Programmer",
+    "available_copies": 9
+}
+
+--- Caso feliz: préstamos activos usuario 1 ---
+[
+    {
+        "id": 1,
+        "user_id": 1,
+        "book_id": 1,
+        "loaned_at": "2026-06-19T20:50:31.735745Z",
+        "status": "active"
+    },
+    {
+        "id": 4,
+        "user_id": 1,
+        "book_id": 2,
+        "loaned_at": "2026-06-19T20:55:34.493699Z",
+        "status": "active"
+    }
+]
+
+--- Caso feliz: historial usuario 1 ---
+[
+    {
+        "id": 4,
+        "user_id": 1,
+        "book_id": 2,
+        "loaned_at": "2026-06-19T20:55:34.493699Z",
+        "status": "active"
+    },
+    {
+        "id": 1,
+        "user_id": 1,
+        "book_id": 1,
+        "loaned_at": "2026-06-19T20:50:31.735745Z",
+        "status": "active"
+    }
+]
+
+--- Error: sin token en loans (401) ---
+{
+    "message": "Unauthorized",
+    "statusCode": 401
+}
+
+--- Caso feliz: devolver libro (loan 1) ---
+{
+    "id": 1,
+    "user_id": 1,
+    "book_id": 1,
+    "loaned_at": "2026-06-19T20:50:31.735745Z",
+    "returned_at": "2026-06-19T20:55:34.828958Z",
+    "status": "returned"
+}
+
+--- Error: devolver préstamo ya devuelto (404) ---
+{
+    "statusCode": 500,
+    "message": "loan inactive\n"
+}
+
+--- Error: préstamo que no existe (404) ---
+{
+    "statusCode": 404,
+    "message": "loan not found or already returned\n"
+}
+
+--- Verificar copias restauradas libro 1 ---
+{
+    "id": 1,
+    "title": "Clean Code - Updated Edition",
+    "available_copies": 3
+}
+
+--- Historial usuario 1 con préstamo devuelto ---
+[
+    {
+        "id": 4,
+        "user_id": 1,
+        "book_id": 2,
+        "loaned_at": "2026-06-19T20:55:34.493699Z",
+        "status": "active"
+    },
+    {
+        "id": 1,
+        "user_id": 1,
+        "book_id": 1,
+        "loaned_at": "2026-06-19T20:50:31.735745Z",
+        "returned_at": "2026-06-19T20:55:34.828958Z",
+        "status": "returned"
+    }
+]
+
+--- Caso feliz: volver a pedir el mismo libro después de devolverlo ---
+{
+    "id": 6,
+    "user_id": 1,
+    "book_id": 1,
+    "loaned_at": "2026-06-19T20:55:34.985415Z",
+    "status": "active"
+}
+
+=== VALIDACIÓN DE COPIAS ===
+--- Setup: ver copias disponibles libro 3 ---
+{
+    "id": 3,
+    "title": "Sapiens",
+    "available_copies": 4
+}
+
+--- Agotar copias libro 3 (4 copias, user 3 ya tiene 1 activo, pedir 3 más con users existentes) ---
+{
+    "id": 7,
+    "status": "active"
+}
+{
+    "id": 8,
+    "status": "active"
+}
+Usuario temporal creado con id: 4
+{
+    "id": 9,
+    "status": "active"
+}
+
+--- Verificar copias en 0 ---
+{
+    "id": 3,
+    "title": "Sapiens",
+    "available_copies": 1
+}
+
+--- Error: sin copias disponibles con usuario existente (409) ---
+{
+    "statusCode": 409,
+    "message": "user already has an active loan for this book\n"
+}
+
+--- Trade-off documentado: usuario inexistente igual crea préstamo ---
+{
+    "id": 11,
+    "user_id": 9999,
+    "book_id": 2,
+    "loaned_at": "2026-06-19T20:55:35.378984Z",
+    "status": "active"
+}
+^ Esto crea el préstamo porque loans-service no valida existencia del usuario (ver README - What was intentionally left out)
+
+--- Health check loans-service ---
+{
+    "status": "ok"
+}

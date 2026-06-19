@@ -55,3 +55,11 @@ func (m *mockLoanRepository) GetHistoryByUser(ctx context.Context, userID int) (
 	args := m.Called(ctx, userID)
 	return args.Get(0).([]model.Loan), args.Error(1)
 }
+
+func (m *mockLoanRepository) GetByID(ctx context.Context, loanID int) (*model.Loan, error) {
+	args := m.Called(ctx, loanID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.Loan), args.Error(1)
+}

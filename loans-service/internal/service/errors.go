@@ -8,4 +8,5 @@ var (
 	ErrNoCopiesAvailable         = errors.New("no copies available")
 	ErrLibraryServiceUnavailable = errors.New("library service unavailable")
 	ErrUpdateCopies              = errors.New("failed to update copies")
+	ErrLoanInactive              = errors.New("loan inactive")
 )

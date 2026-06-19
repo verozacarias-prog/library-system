@@ -35,6 +35,8 @@ services:
       - POSTGRES_DB=library_db
     ports:
       - "5432:5432"
+    volumes:
+      - postgres-library-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -53,6 +55,7 @@ services:
       - "5433:5432"
     volumes:
       - ./loans-service/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - postgres-loans-data:/var/lib/postgresql/data 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -64,3 +67,7 @@ services:
 networks:
   library-network:
     driver: bridge
+
+volumes:
+  postgres-library-data:
+  postgres-loans-data:

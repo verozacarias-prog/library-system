@@ -27,10 +27,15 @@ export class UsersService {
         return users.map(({ password, ...u }) => u);
     }
 
-    async findOne(id: number): Promise<User> {
+    private async findOneWithPassword(id: number): Promise<User> {
         const user = await this.userRepository.findOne({ where: { id } });
         if (!user) throw new NotFoundException(`User ${id} not found`);
         return user;
+    }
+
+    async findOne(id: number): Promise<Omit<User, 'password'>> {
+        const { password, ...result } = await this.findOneWithPassword(id);
+        return result;
     }
 
     async findByEmail(email: string): Promise<User | null> {
@@ -38,16 +43,15 @@ export class UsersService {
     }
 
     async update(id: number, data: Partial<User>): Promise<Omit<User, 'password'>> {
-        await this.findOne(id);
+        await this.findOneWithPassword(id);
         if (data.password) data.password = await bcrypt.hash(data.password, 10);
         await this.userRepository.update(id, data);
-        const updated = await this.findOne(id);
-        const { password, ...result } = updated;
+        const { password, ...result } = await this.findOneWithPassword(id);
         return result;
     }
 
     async remove(id: number): Promise<void> {
-        await this.findOne(id);
+        await this.findOneWithPassword(id);
         await this.userRepository.delete(id);
     }
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
 )
@@ -24,6 +25,13 @@ func (r *LoanRepository) Create(ctx context.Context, req model.CreateLoanRequest
 		QueryCreateLoan,
 		req.UserID, req.BookID, time.Now().UTC(),
 	).Scan(&loan.ID, &loan.UserID, &loan.BookID, &loan.LoanedAt, &loan.ReturnedAt, &loan.Status)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+			return nil, ErrLoanAlreadyActive
+		}
+		return nil, err
+	}
 	return loan, err
 }
 
@@ -31,7 +39,7 @@ func (r *LoanRepository) UpdateStatus(ctx context.Context, loanID int, status st
 	loan := &model.Loan{}
 	err := r.pool.QueryRow(ctx,
 		QueryUpdateStatus,
-		status, time.Now(), loanID,
+		time.Now(), status, loanID,
 	).Scan(&loan.ID, &loan.UserID, &loan.BookID, &loan.LoanedAt, &loan.ReturnedAt, &loan.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrLoanNotFound
@@ -73,4 +81,14 @@ func (r *LoanRepository) GetHistoryByUser(ctx context.Context, userID int) ([]mo
 		loans = append(loans, l)
 	}
 	return loans, nil
+}
+
+func (r *LoanRepository) GetByID(ctx context.Context, loanID int) (*model.Loan, error) {
+    loan := &model.Loan{}
+    err := r.pool.QueryRow(ctx, QueryGetByID, loanID).
+        Scan(&loan.ID, &loan.UserID, &loan.BookID, &loan.LoanedAt, &loan.ReturnedAt, &loan.Status)
+    if errors.Is(err, pgx.ErrNoRows) {
+        return nil, ErrLoanNotFound
+    }
+    return loan, err
 }

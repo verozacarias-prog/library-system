@@ -1,6 +1,8 @@
-import { IsString, IsNotEmpty, IsInt, Min, IsISBN, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, Min, IsISBN } from 'class-validator';
+import { IsNotFutureYear } from './validators';
 
 export class CreateBookDto {
+
     @IsString()
     @IsNotEmpty()
     title: string;
@@ -13,7 +15,8 @@ export class CreateBookDto {
     isbn: string;
 
     @IsInt()
-    @Min(0)
+    @Min(1450)
+    @IsNotFutureYear()
     year: number;
 
     @IsString()
@@ -21,6 +24,6 @@ export class CreateBookDto {
     genre: string;
 
     @IsInt()
-    @Min(0)
+    @Min(1)
     available_copies: number;
 }

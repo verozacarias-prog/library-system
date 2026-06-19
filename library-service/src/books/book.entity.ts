@@ -20,6 +20,6 @@ export class Book {
     @Column()
     genre: string;
 
-    @Column({ name: 'available_copies', default: 1 })
+    @Column({ name: 'available_copies' })
     available_copies: number;
 }
