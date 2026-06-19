@@ -15,7 +15,7 @@ export class BooksService {
     async create(data: Partial<Book>): Promise<Book> {
         try {
             const book = this.bookRepository.create(data);
-            return this.bookRepository.save(book);
+            return await this.bookRepository.save(book);
         } catch (err: any) {
             if (err?.code === PG_UNIQUE_VIOLATION) {
                 throw new ConflictException(`Book with ISBN ${data.isbn} already exists`);

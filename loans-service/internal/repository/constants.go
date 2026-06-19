@@ -19,4 +19,8 @@ const (
 	QueryGetHistoryByUser = `
 		SELECT id, user_id, book_id, loaned_at, returned_at, status
 		FROM loans WHERE user_id = $1 ORDER BY loaned_at DESC`
+
+	QueryGetByID = `
+    	SELECT id, user_id, book_id, loaned_at, returned_at, status
+    	FROM loans WHERE id = $1`
 )

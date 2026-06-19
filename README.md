@@ -48,6 +48,8 @@ The loans-service waits for postgres-loans to be healthy before starting (via Do
 
 The loans schema is applied automatically on first run from `loans-service/db/schema.sql`.
 
+> **Note on data persistence:** Use `docker compose down` (without `-v`) to stop containers while preserving database data. Only use `docker compose down -v` if you want to reset all data. Named volumes are declared in `docker-compose.yml` to ensure persistence across restarts.
+
 ### Environment variables
 
 Copy `.env.example` to `.env` and fill in the values before running locally without Docker.
@@ -116,238 +118,78 @@ All requests go through **library-service** on port 3000. loans-service (port 80
 
 ## End-to-End Testing
 
-All commands below run against `http://localhost:3000` after `docker compose up --build`.
+All tests run against `http://localhost:3000` after `docker compose up --build`.
 
-Replace `$TOKEN` with the value returned by the login step, or use the `export TOKEN=` command shown in Step 3.
+### 1. Seed the database
 
-### Step 1 — Register an admin user
-
-```bash
-curl -s -X POST http://localhost:3000/users \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Verónica", "email": "vero@test.com", "password": "secret123", "role": "admin"}' \
-  | jq
-```
-
-Expected: `201` with user object (no password field).
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-### Step 2 — Register a regular user
+A seed script creates the initial test data: 2 admin users, 1 regular user, 4 books, and 3 loans.
 
 ```bash
-curl -s -X POST http://localhost:3000/users \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Lector", "email": "lector@test.com", "password": "secret123", "role": "user"}' \
-  | jq
+chmod +x scripts/seed.sh
+./scripts/seed.sh
 ```
 
-Expected: `201` with user object.
+Expected output: 3 users created, 4 books created, 3 loans created.
 
-```json
-<!-- EVIDENCE: paste response here -->
+```
+<!-- EVIDENCE: paste seed.sh output here -->
 ```
 
-### Step 3 — Login as admin
+### 2. Verify database state
+
+Confirm data was persisted correctly in both databases:
 
 ```bash
-curl -s -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email": "vero@test.com", "password": "secret123"}' \
-  | jq
+# Users and books (library-service DB)
+docker exec -it library-system-postgres-library-1 psql -U postgres -d library_db \
+  -c "SELECT id, name, email, role FROM users;"
+
+docker exec -it library-system-postgres-library-1 psql -U postgres -d library_db \
+  -c "SELECT id, title, author, available_copies FROM books;"
+
+# Loans (loans-service DB)
+docker exec -it library-system-postgres-loans-1 psql -U postgres -d loans_db \
+  -c "SELECT * FROM loans;"
 ```
 
-Expected: `200` with `access_token`.
-
-```json
-<!-- EVIDENCE: paste response here -->
+```
+<!-- EVIDENCE: paste psql output here -->
 ```
 
-Export the token for the rest of the session:
+### 3. Run CRUD and validation tests (books & users)
+
+Tests UPDATE and DELETE operations for books and users, covering all validation edge cases (invalid fields, missing auth, wrong role, not found, etc.).
 
 ```bash
-export TOKEN="eyJhbGci..."
+chmod +x scripts/test_update_delete.sh
+./scripts/test_update_delete.sh
 ```
 
-### Step 4 — Create a book (admin only)
+Expected: each request shows its HTTP status and response body. All status codes match expectations.
+
+```
+<!-- EVIDENCE: paste test_update_delete.sh output here -->
+```
+
+### 4. Run full functional tests (auth, loans, error cases)
+
+Tests the complete loan lifecycle: create loan → verify copies decremented → return book → verify copies restored → view history. Also covers error cases: no copies available, duplicate loan, missing auth, wrong role.
 
 ```bash
-curl -s -X POST http://localhost:3000/books \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "available_copies": 3}' \
-  | jq
+chmod +x scripts/test_full.sh
+./scripts/test_full.sh
 ```
 
-Expected: `201` with book object. Note the `id` for the next steps.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-### Step 5 — List books with filters
-
-```bash
-curl -s "http://localhost:3000/books?author=Martin&genre=tech&available=true&page=1&limit=10" | jq
-```
-
-Expected: `200` with `{ data: [...], total: 1 }`.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-### Step 6 — Create a loan
-
-```bash
-curl -s -X POST http://localhost:3000/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 1}' \
-  | jq
-```
-
-Expected: `201` with loan object (`status: "active"`). loans-service validated book availability with library-service before persisting.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-### Step 7 — Verify available copies decremented
-
-```bash
-curl -s http://localhost:3000/books/1 | jq '.available_copies'
-```
-
-Expected: `2` (was 3).
+Expected highlights:
+- Loan creation returns `201` with `status: "active"`
+- Available copies decrement after loan, increment after return
+- Second loan for same user + book returns `409 Conflict`
+- Exhausting all copies returns `409 Conflict`
+- Missing token returns `401 Unauthorized`
+- Non-admin creating a book returns `403 Forbidden`
 
 ```
-<!-- EVIDENCE: paste output here -->
-```
-
-### Step 8 — Get active loans for user
-
-```bash
-curl -s http://localhost:3000/loans/users/1 \
-  -H "Authorization: Bearer $TOKEN" \
-  | jq
-```
-
-Expected: `200` with array containing the active loan.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-### Step 9 — Return the book
-
-```bash
-curl -s -X PATCH http://localhost:3000/loans/1 \
-  -H "Authorization: Bearer $TOKEN" \
-  | jq
-```
-
-Expected: `200` with loan object (`status: "returned"`). Available copies incremented back to 3.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-### Step 10 — Verify copies restored
-
-```bash
-curl -s http://localhost:3000/books/1 | jq '.available_copies'
-```
-
-Expected: `3`.
-
-```
-<!-- EVIDENCE: paste output here -->
-```
-
-### Step 11 — View loan history
-
-```bash
-curl -s http://localhost:3000/loans/users/1/history \
-  -H "Authorization: Bearer $TOKEN" \
-  | jq
-```
-
-Expected: `200` with array containing the returned loan.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-### Step 12 — Error cases
-
-**Borrow a book with no copies available:**
-
-Create 2 more loans first to exhaust the remaining copies:
-
-```bash
-curl -s -X POST http://localhost:3000/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 2, "book_id": 1}' | jq
-
-curl -s -X POST http://localhost:3000/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 3, "book_id": 1}' | jq
-```
-
-Then try one more:
-
-```bash
-curl -s -X POST http://localhost:3000/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 4, "book_id": 1}' \
-  | jq
-```
-
-Expected: `409 Conflict`.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-**Try to create a book without admin role:**
-
-```bash
-export LECTOR_TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email": "lector@test.com", "password": "secret123"}' | jq -r '.access_token')
-
-curl -s -X POST http://localhost:3000/books \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $LECTOR_TOKEN" \
-  -d '{"title": "Test", "author": "X", "isbn": "1234567890123", "year": 2024, "genre": "test", "available_copies": 1}' \
-  | jq
-```
-
-Expected: `403 Forbidden`.
-
-```json
-<!-- EVIDENCE: paste response here -->
-```
-
-**Access a protected endpoint without token:**
-
-```bash
-curl -s -X POST http://localhost:3000/loans \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": 1, "book_id": 1}' \
-  | jq
-```
-
-Expected: `401 Unauthorized`.
-
-```json
-<!-- EVIDENCE: paste response here -->
+<!-- EVIDENCE: paste test_full.sh output here -->
 ```
 
 ---
@@ -388,6 +230,13 @@ Instead of a `/loans/:id/return` verb-in-URL pattern, a `PATCH /loans/:id` was u
 
 **Inter-service authentication with short-lived JWT**
 loans-service generates a JWT signed with the shared `JWT_SECRET` (`role: "service"`, 1-minute expiry) on each outbound call to library-service. library-service validates it with the standard `JwtAuthGuard` — no new authentication mechanism needed. The short expiry limits the blast radius of a leaked token in transit.
+
+**Distributed transaction handling**
+Loan creation and return both involve two systems (loans DB + library-service copy count). To maintain consistency:
+- On **loan creation**: copies are decremented first, then the loan is persisted. If the DB insert fails, a compensating increment call is made to restore the count.
+- On **loan return**: the loan is fetched first (to get the bookID), copies are incremented, then the loan status is updated. If the status update fails, a compensating decrement call restores the count.
+
+This is best-effort consistency — not a distributed transaction. A failure in the compensating call would leave the systems out of sync, which is a known trade-off documented under "What was intentionally left out."
 
 ---
 
@@ -432,9 +281,9 @@ cd library-service
 npm test
 ```
 
-**loans-service:** 6 unit tests — service layer (CreateLoan happy path, book not available, BookReturned, GetActiveLoans) and handler layer (CreateLoan 201, invalid body 400). Mocks used for repository and LibraryClient — no database required.
+**loans-service:** unit tests — service layer (CreateLoan happy path, book not available, BookReturned, GetActiveLoans) and handler layer (CreateLoan 201, invalid body 400). Mocks used for repository and LibraryClient — no database required.
 
-**library-service:** 6 unit tests — BooksService (create, findOne not found, updateCopies) and AuthService (valid login, user not found, wrong password). Mocks used for TypeORM repository and JwtService.
+**library-service:** unit tests — BooksService (create, findOne not found, updateCopies) and AuthService (valid login, user not found, wrong password). Mocks used for TypeORM repository and JwtService.
 
 ---
 
@@ -467,6 +316,7 @@ The assessment specifies "read and their loans" for regular users. This was inte
 - **TypeORM migrations:** `synchronize: true` is used for this assessment. In production, replace with `typeorm migration:generate` + `typeorm migration:run` to get versioned, reversible schema changes.
 - **User existence validation in loans-service:** loans-service does not call library-service to verify that the userId is valid before creating a loan. A dedicated `/users/:id` validation call could be added, but adds latency for the common path.
 - **Loan access restriction by ownership:** any authenticated user can currently view any other user's loans. Restricting `GET /loans/users/:userId` to the owner (or admin) is a straightforward improvement not implemented in this version.
+- **Compensating transaction reliability:** if the compensating call (copy revert) fails after a DB error, the two systems will be out of sync. A production implementation would use an outbox pattern or saga coordinator. Out of scope for this assessment.
 - **Rate limiting:** out of scope for this assessment.
 - **Frontend:** explicitly excluded by the assessment.
 - **Kubernetes / service mesh:** explicitly excluded by the assessment.
@@ -480,6 +330,10 @@ The assessment specifies "read and their loans" for regular users. This was inte
 library-system/
 ├── docker-compose.yml
 ├── .env.example
+├── scripts/
+│   ├── seed.sh                   # creates test users, books, loans
+│   ├── test_update_delete.sh     # CRUD + validation tests for books and users
+│   └── test_full.sh              # auth, loans lifecycle, and error cases
 ├── library-service/              # NestJS — books, users, auth, loans proxy
 │   ├── src/
 │   │   ├── books/

@@ -82,3 +82,13 @@ func (r *LoanRepository) GetHistoryByUser(ctx context.Context, userID int) ([]mo
 	}
 	return loans, nil
 }
+
+func (r *LoanRepository) GetByID(ctx context.Context, loanID int) (*model.Loan, error) {
+    loan := &model.Loan{}
+    err := r.pool.QueryRow(ctx, QueryGetByID, loanID).
+        Scan(&loan.ID, &loan.UserID, &loan.BookID, &loan.LoanedAt, &loan.ReturnedAt, &loan.Status)
+    if errors.Is(err, pgx.ErrNoRows) {
+        return nil, ErrLoanNotFound
+    }
+    return loan, err
+}

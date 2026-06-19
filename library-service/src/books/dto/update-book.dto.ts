@@ -1,4 +1,5 @@
 import { IsString, IsNotEmpty, IsInt, Min, IsISBN, IsOptional } from 'class-validator';
+import { IsNotFutureYear } from './validators';
 
 export class UpdateBookDto {
     @IsOptional()
@@ -17,7 +18,8 @@ export class UpdateBookDto {
 
     @IsOptional()
     @IsInt()
-    @Min(0)
+    @Min(1450)
+    @IsNotFutureYear()
     year?: number;
 
     @IsOptional()
@@ -28,5 +30,5 @@ export class UpdateBookDto {
     @IsOptional()
     @IsInt()
     @Min(0)
-    availableCopies?: number;
+    available_copies?: number;
 }

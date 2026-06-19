@@ -1,23 +1,5 @@
-import { IsString, IsNotEmpty, IsInt, Min, IsISBN, ValidationOptions, registerDecorator } from 'class-validator';
-
-function IsNotFutureYear(validationOptions?: ValidationOptions) {
-    return function (object: object, propertyName: string) {
-        registerDecorator({
-            name: 'isNotFutureYear',
-            target: object.constructor,
-            propertyName,
-            options: validationOptions,
-            validator: {
-                validate(value: unknown) {
-                    return typeof value === 'number' && value <= new Date().getFullYear();
-                },
-                defaultMessage() {
-                    return `year must not be greater than ${new Date().getFullYear()}`;
-                },
-            },
-        });
-    };
-}
+import { IsString, IsNotEmpty, IsInt, Min, IsISBN } from 'class-validator';
+import { IsNotFutureYear } from './validators';
 
 export class CreateBookDto {
 
