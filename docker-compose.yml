@@ -8,7 +8,8 @@ services:
       - LOANS_SERVICE_URL=http://loans-service:8081
       - JWT_SECRET=supersecretkey
     depends_on:
-      - postgres-library
+      postgres-library:
+        condition: service_healthy
     networks:
       - library-network
 
@@ -19,6 +20,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres-loans:5432/loans_db
       - LIBRARY_SERVICE_URL=http://library-service:3000
+      - JWT_SECRET=supersecretkey
     depends_on:
       postgres-loans:
         condition: service_healthy
@@ -33,6 +35,11 @@ services:
       - POSTGRES_DB=library_db
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - library-network
 
