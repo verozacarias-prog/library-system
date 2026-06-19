@@ -66,7 +66,7 @@ func (h *LoanHandler) ReturnLoan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LoanHandler) GetActiveLoans(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	userID, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.Error(w, ErrInvalidUserID.Error(), http.StatusBadRequest)
 		return
@@ -83,7 +83,7 @@ func (h *LoanHandler) GetActiveLoans(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LoanHandler) GetLoanHistory(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	userID, err := strconv.Atoi(chi.URLParam(r, "userID"))
 	if err != nil {
 		http.Error(w, ErrInvalidUserID.Error(), http.StatusBadRequest)
 		return

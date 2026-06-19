@@ -24,6 +24,8 @@ postgres-library                   postgres-loans
 
 Each service has its own PostgreSQL database — separation of concerns at the data level.
 
+Inter-service communication is authenticated: loans-service generates a short-lived JWT (signed with the shared `JWT_SECRET`, `role: "service"`, 1-minute expiry) on each outbound request to library-service. library-service validates it with the standard `JwtAuthGuard`.
+
 ---
 
 ## Setup
@@ -44,6 +46,8 @@ This starts 4 containers: library-service, loans-service, postgres-library, post
 
 The loans-service waits for postgres-loans to be healthy before starting (via Docker healthcheck).
 
+The library-service waits for postgres-library to be healthy before starting (via Docker healthcheck).
+
 The loans schema is applied automatically on first run from `loans-service/db/schema.sql`.
 
 ### Environment variables
@@ -58,80 +62,294 @@ LIBRARY_SERVICE_URL=http://localhost:3000
 PORT=3000
 ```
 
-> **Note:** JWT_SECRET must never be hardcoded in production. Use a secrets manager or external environment variable injection.
+> **Note:** JWT_SECRET must never be hardcoded in production. Use a secrets manager or external environment variable injection. Both services must share the same JWT_SECRET value.
 
 ---
 
-## Example Flow
+## API Reference
 
-### 1. Register a user
+All requests go through **library-service** on port 3000. loans-service (port 8081) is internal only.
+
+### Auth
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/auth/login` | None | Login, returns JWT |
+
+### Users
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/users` | None | Register a new user |
+| GET | `/users` | JWT + admin | List all users |
+| GET | `/users/:id` | JWT | Get user by ID |
+| PATCH | `/users/:id` | JWT | Update user (only admin can change role) |
+| DELETE | `/users/:id` | JWT + admin | Delete user |
+
+### Books
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/books` | None | List books with filters and pagination |
+| GET | `/books/:id` | None | Get book by ID |
+| POST | `/books` | JWT + admin | Create book |
+| PATCH | `/books/:id` | JWT + admin | Update book |
+| DELETE | `/books/:id` | JWT + admin | Delete book |
+| PATCH | `/books/:id/copies` | JWT (internal) | Update available copies — called by loans-service |
+
+**Filters for `GET /books`:** `?author=&genre=&available=true&page=1&limit=10`
+
+### Loans
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/loans` | JWT | Create loan (proxied to loans-service) |
+| PATCH | `/loans/:id` | JWT | Return a book (proxied to loans-service) |
+| GET | `/loans/users/:userId` | JWT | Active loans for a user |
+| GET | `/loans/users/:userId/history` | JWT | Loan history for a user |
+
+### Health
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/health` | None | loans-service health check (port 8081 direct) |
+
+---
+
+## End-to-End Testing
+
+All commands below run against `http://localhost:3000` after `docker compose up --build`.
+
+Replace `$TOKEN` with the value returned by the login step, or use the `export TOKEN=` command shown in Step 3.
+
+### Step 1 — Register an admin user
 
 ```bash
-curl -X POST http://localhost:3000/users \
+curl -s -X POST http://localhost:3000/users \
   -H "Content-Type: application/json" \
-  -d '{"name": "Verónica", "email": "vero@test.com", "password": "secret123", "role": "admin"}'
+  -d '{"name": "Verónica", "email": "vero@test.com", "password": "secret123", "role": "admin"}' \
+  | jq
 ```
 
-### 2. Login
+Expected: `201` with user object (no password field).
 
-```bash
-curl -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email": "vero@test.com", "password": "secret123"}'
-```
-
-Response:
 ```json
-{ "access_token": "eyJhbGci..." }
+<!-- EVIDENCE: paste response here -->
 ```
 
-### 3. Create a book (admin only)
+### Step 2 — Register a regular user
 
 ```bash
-curl -X POST http://localhost:3000/books \
+curl -s -X POST http://localhost:3000/users \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "available_copies": 3}'
+  -d '{"name": "Lector", "email": "lector@test.com", "password": "secret123", "role": "user"}' \
+  | jq
 ```
 
-### 4. List books with filters and pagination
+Expected: `201` with user object.
 
-```bash
-curl "http://localhost:3000/books?author=Martin&genre=tech&available=true&page=1&limit=10"
+```json
+<!-- EVIDENCE: paste response here -->
 ```
 
-### 5. Create a loan
+### Step 3 — Login as admin
 
 ```bash
-curl -X POST http://localhost:3000/loans \
+curl -s -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"user_id": 1, "book_id": 1}'
+  -d '{"email": "vero@test.com", "password": "secret123"}' \
+  | jq
 ```
 
-library-service forwards the request to loans-service, which validates book availability with library-service before persisting the loan.
+Expected: `200` with `access_token`.
 
-### 6. Return a book
-
-```bash
-curl -X PATCH http://localhost:3000/loans/1 \
-  -H "Authorization: Bearer YOUR_TOKEN"
+```json
+<!-- EVIDENCE: paste response here -->
 ```
 
-loans-service updates the loan status to `returned` and increments the available copies in library-service.
-
-### 7. View active loans for a user
+Export the token for the rest of the session:
 
 ```bash
-curl http://localhost:3000/loans/users/1 \
-  -H "Authorization: Bearer YOUR_TOKEN"
+export TOKEN="eyJhbGci..."
 ```
 
-### 8. View loan history
+### Step 4 — Create a book (admin only)
 
 ```bash
-curl http://localhost:3000/loans/users/1/history \
-  -H "Authorization: Bearer YOUR_TOKEN"
+curl -s -X POST http://localhost:3000/books \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"title": "Clean Code", "author": "Robert Martin", "isbn": "9780132350884", "year": 2008, "genre": "tech", "available_copies": 3}' \
+  | jq
+```
+
+Expected: `201` with book object. Note the `id` for the next steps.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+### Step 5 — List books with filters
+
+```bash
+curl -s "http://localhost:3000/books?author=Martin&genre=tech&available=true&page=1&limit=10" | jq
+```
+
+Expected: `200` with `{ data: [...], total: 1 }`.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+### Step 6 — Create a loan
+
+```bash
+curl -s -X POST http://localhost:3000/loans \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"user_id": 1, "book_id": 1}' \
+  | jq
+```
+
+Expected: `201` with loan object (`status: "active"`). loans-service validated book availability with library-service before persisting.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+### Step 7 — Verify available copies decremented
+
+```bash
+curl -s http://localhost:3000/books/1 | jq '.available_copies'
+```
+
+Expected: `2` (was 3).
+
+```
+<!-- EVIDENCE: paste output here -->
+```
+
+### Step 8 — Get active loans for user
+
+```bash
+curl -s http://localhost:3000/loans/users/1 \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq
+```
+
+Expected: `200` with array containing the active loan.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+### Step 9 — Return the book
+
+```bash
+curl -s -X PATCH http://localhost:3000/loans/1 \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq
+```
+
+Expected: `200` with loan object (`status: "returned"`). Available copies incremented back to 3.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+### Step 10 — Verify copies restored
+
+```bash
+curl -s http://localhost:3000/books/1 | jq '.available_copies'
+```
+
+Expected: `3`.
+
+```
+<!-- EVIDENCE: paste output here -->
+```
+
+### Step 11 — View loan history
+
+```bash
+curl -s http://localhost:3000/loans/users/1/history \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq
+```
+
+Expected: `200` with array containing the returned loan.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+### Step 12 — Error cases
+
+**Borrow a book with no copies available:**
+
+Create 2 more loans first to exhaust the remaining copies:
+
+```bash
+curl -s -X POST http://localhost:3000/loans \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"user_id": 2, "book_id": 1}' | jq
+
+curl -s -X POST http://localhost:3000/loans \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"user_id": 3, "book_id": 1}' | jq
+```
+
+Then try one more:
+
+```bash
+curl -s -X POST http://localhost:3000/loans \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"user_id": 4, "book_id": 1}' \
+  | jq
+```
+
+Expected: `409 Conflict`.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+**Try to create a book without admin role:**
+
+```bash
+export LECTOR_TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "lector@test.com", "password": "secret123"}' | jq -r '.access_token')
+
+curl -s -X POST http://localhost:3000/books \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LECTOR_TOKEN" \
+  -d '{"title": "Test", "author": "X", "isbn": "1234567890123", "year": 2024, "genre": "test", "available_copies": 1}' \
+  | jq
+```
+
+Expected: `403 Forbidden`.
+
+```json
+<!-- EVIDENCE: paste response here -->
+```
+
+**Access a protected endpoint without token:**
+
+```bash
+curl -s -X POST http://localhost:3000/loans \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 1, "book_id": 1}' \
+  | jq
+```
+
+Expected: `401 Unauthorized`.
+
+```json
+<!-- EVIDENCE: paste response here -->
 ```
 
 ---
@@ -169,6 +387,9 @@ A user cannot have the same book twice on active loan simultaneously. Once retur
 
 **PATCH /loans/:id for returns**
 Instead of a `/loans/:id/return` verb-in-URL pattern, a `PATCH /loans/:id` was used. The service layer method `BookReturned` always sets the status to `returned` — the status is a consequence of the operation, not an input from the client.
+
+**Inter-service authentication with short-lived JWT**
+loans-service generates a JWT signed with the shared `JWT_SECRET` (`role: "service"`, 1-minute expiry) on each outbound call to library-service. library-service validates it with the standard `JwtAuthGuard` — no new authentication mechanism needed. The short expiry limits the blast radius of a leaked token in transit.
 
 ---
 

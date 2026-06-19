@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Book } from './book.entity';
@@ -47,7 +47,9 @@ export class BooksService {
 
     async updateCopies(id: number, delta: number): Promise<Book> {
         const book = await this.findOne(id);
-        book.available_copies += delta;
+        const next = book.available_copies + delta;
+        if (next < 0) throw new ConflictException("not enough copies available");
+        book.available_copies = next;
         return this.bookRepository.save(book);
     }
 }
