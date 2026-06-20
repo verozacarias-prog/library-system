@@ -149,11 +149,11 @@ TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
 curl -s http://localhost:3000/books/1 | jq '{id,title,author,available_copies}'
 # {"id":1,"title":"The Go Programming Language","author":"Alan Donovan","available_copies":3}
 
-# 3. Create a loan
+# 3. Create a loan (user_id is derived from the JWT — only book_id is needed)
 curl -s -X POST http://localhost:3000/loans \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":1,"book_id":1}' | jq .
+  -d '{"book_id":1}' | jq .
 # {"id":1,"user_id":1,"book_id":1,"loaned_at":"...","status":"active"}
 
 # 4. Verify copies decremented
@@ -346,7 +346,7 @@ TypeORM auto-creates/updates tables from entity definitions. Appropriate for dev
 `@Roles('admin')` stores metadata on the endpoint. `RolesGuard` reads it via `Reflector` and compares against the JWT payload role. Endpoints without `@Roles` are accessible to any authenticated user.
 
 **Input validation: class-validator**
-All endpoints use typed DTOs with `class-validator` decorators. Global `ValidationPipe` (`whitelist + forbidNonWhitelisted`) in `main.ts` rejects unknown fields at the boundary — including the loans proxy, which validates `user_id` and `book_id` before forwarding.
+All endpoints use typed DTOs with `class-validator` decorators. Global `ValidationPipe` (`whitelist + forbidNonWhitelisted`) in `main.ts` rejects unknown fields at the boundary — including the loans proxy, which validates `book_id` before forwarding. `user_id` is never accepted from the client; it is always derived from the JWT payload (`sub → id`) so callers cannot borrow on behalf of another user.
 
 **Atomic copy update**
 `updateCopies` uses a single `UPDATE ... SET available_copies = available_copies + $delta WHERE available_copies + $delta >= 0 RETURNING *`. Eliminates the race condition where two concurrent loan requests could both read the same copy count.
@@ -421,4 +421,3 @@ library-system/
 | Item | What happens | Why it wasn't resolved | Production fix |
 |------|----------------|--------------------------|--------------------|
 | TOCTOU race condition on available copies | Two concurrent loan requests for the same book with 1 copy left can both pass the `copiasDisponibles > 0` check before either decrements the counter | Found during manual testing, not in the original plan. Not verified with `go test -race` — Go's race detector catches memory races between goroutines in one process, not this kind of database-level race across separate HTTP requests. Correct verification requires a concurrency test (N parallel requests, assert only 1 succeeds), not implemented before submission due to time; planned as a follow-up | Atomic conditional update: `UPDATE books SET copias_disponibles = copias_disponibles - 1 WHERE id = $1 AND copias_disponibles > 0`, checking `RowsAffected() == 0` to reject when no copies are available |
-| Loan ownership restriction | `GET /loans/users/:userId` doesn't validate that the caller is that user or an admin — any authenticated user can list another user's loans | Not an explicit requirement for Servicio B (it has no auth of its own — that's Servicio A's responsibility), but surfaced as a gap in manual testing; no time to add the authorization check | Servicio A should derive `userId` from the JWT instead of trusting the path parameter, or validate caller identity/role before proxying to loans-service |

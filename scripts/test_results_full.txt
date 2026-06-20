@@ -285,12 +285,12 @@
 }
 
 === LOANS ===
---- Caso feliz: crear préstamo (libro 2, user 1) ---
+--- Caso feliz: crear préstamo (libro 2, usuario logueado = vero) ---
 {
   "id": 4,
   "user_id": 1,
   "book_id": 2,
-  "loaned_at": "2026-06-20T03:57:06.363883Z",
+  "loaned_at": "2026-06-20T16:32:50.666896Z",
   "status": "active"
 }
 
@@ -308,10 +308,10 @@
   "statusCode": 404
 }
 
---- Error: user_id o book_id inválido (400) ---
+--- Error: book_id inválido (400) ---
 {
   "message": [
-    "user_id must be a positive number"
+    "book_id must be a positive number"
   ],
   "error": "Bad Request",
   "statusCode": 400
@@ -321,8 +321,6 @@
 {
   "message": [
     "property invalid should not exist",
-    "user_id must be a positive number",
-    "user_id must be an integer number",
     "book_id must be a positive number",
     "book_id must be an integer number"
   ],
@@ -343,20 +341,20 @@
   "available_copies": 9
 }
 
---- Caso feliz: préstamos activos usuario 1 ---
+--- Caso feliz: préstamos activos usuario 1 (admin viendo los suyos) ---
 [
   {
     "id": 1,
     "user_id": 1,
     "book_id": 1,
-    "loaned_at": "2026-06-20T03:55:21.591991Z",
+    "loaned_at": "2026-06-20T16:31:18.825993Z",
     "status": "active"
   },
   {
     "id": 4,
     "user_id": 1,
     "book_id": 2,
-    "loaned_at": "2026-06-20T03:57:06.363883Z",
+    "loaned_at": "2026-06-20T16:32:50.666896Z",
     "status": "active"
   }
 ]
@@ -367,14 +365,39 @@
     "id": 4,
     "user_id": 1,
     "book_id": 2,
-    "loaned_at": "2026-06-20T03:57:06.363883Z",
+    "loaned_at": "2026-06-20T16:32:50.666896Z",
     "status": "active"
   },
   {
     "id": 1,
     "user_id": 1,
     "book_id": 1,
-    "loaned_at": "2026-06-20T03:55:21.591991Z",
+    "loaned_at": "2026-06-20T16:31:18.825993Z",
+    "status": "active"
+  }
+]
+
+--- Error: lector intenta ver préstamos de usuario 1 (403) ---
+{
+  "message": "You can only view your own loans",
+  "error": "Forbidden",
+  "statusCode": 403
+}
+
+--- Error: lector intenta ver historial de usuario 1 (403) ---
+{
+  "message": "You can only view your own loan history",
+  "error": "Forbidden",
+  "statusCode": 403
+}
+
+--- Caso feliz: lector ve sus propios préstamos (userId = 3) ---
+[
+  {
+    "id": 3,
+    "user_id": 3,
+    "book_id": 3,
+    "loaned_at": "2026-06-20T16:31:18.974369Z",
     "status": "active"
   }
 ]
@@ -390,8 +413,8 @@
   "id": 1,
   "user_id": 1,
   "book_id": 1,
-  "loaned_at": "2026-06-20T03:55:21.591991Z",
-  "returned_at": "2026-06-20T03:57:06.775806Z",
+  "loaned_at": "2026-06-20T16:31:18.825993Z",
+  "returned_at": "2026-06-20T16:32:51.069072Z",
   "status": "returned"
 }
 
@@ -422,15 +445,15 @@
     "id": 4,
     "user_id": 1,
     "book_id": 2,
-    "loaned_at": "2026-06-20T03:57:06.363883Z",
+    "loaned_at": "2026-06-20T16:32:50.666896Z",
     "status": "active"
   },
   {
     "id": 1,
     "user_id": 1,
     "book_id": 1,
-    "loaned_at": "2026-06-20T03:55:21.591991Z",
-    "returned_at": "2026-06-20T03:57:06.775806Z",
+    "loaned_at": "2026-06-20T16:31:18.825993Z",
+    "returned_at": "2026-06-20T16:32:51.069072Z",
     "status": "returned"
   }
 ]
@@ -440,12 +463,12 @@
   "id": 6,
   "user_id": 1,
   "book_id": 1,
-  "loaned_at": "2026-06-20T03:57:06.923316Z",
+  "loaned_at": "2026-06-20T16:32:51.21949Z",
   "status": "active"
 }
 
 === VALIDACIÓN DE COPIAS ===
---- Agotar copias libro 3 (4 copias, user 3 ya tiene 1 activo, pedir 3 más con users existentes) ---
+--- Agotar copias libro 3 (4 copias, lector ya tiene 1 activo desde seed, crear 3 usuarios temporales para los slots restantes) ---
 --- Verificar copias iniciales de libro 3 ---
 {
   "id": 3,
@@ -461,7 +484,6 @@
   "id": 8,
   "status": "active"
 }
-Usuario temporal creado con id: 4
 {
   "id": 9,
   "status": "active"
@@ -474,22 +496,12 @@ Usuario temporal creado con id: 4
   "available_copies": 0
 }
 
---- Error: sin copias disponibles con usuario existente (409) ---
+--- Error: sin copias disponibles (409) — temp3 no tiene préstamo activo del libro, error real es de stock ---
 {
   "error": "Conflict",
   "message": "No copies available",
   "statusCode": 409
 }
-
---- Trade-off documentado: usuario inexistente igual crea préstamo ---
-{
-  "id": 10,
-  "user_id": 9999,
-  "book_id": 2,
-  "loaned_at": "2026-06-20T03:57:07.275526Z",
-  "status": "active"
-}
-^ Esto crea el préstamo porque loans-service no valida existencia del usuario (ver README - What was intentionally left out)
 
 --- Health check loans-service ---
 {

@@ -189,32 +189,32 @@ echo ""
 echo "=== LOANS ==="
 # ==========================================
 
-echo "--- Caso feliz: crear préstamo (libro 2, user 1) ---"
+echo "--- Caso feliz: crear préstamo (libro 2, usuario logueado = vero) ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 2}' | jq
+  -d '{"book_id": 2}' | jq
 echo ""
 
 echo "--- Error: préstamo duplicado - mismo user y libro activo (409) ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 1}' | jq
+  -d '{"book_id": 1}' | jq
 echo ""
 
 echo "--- Error: libro que no existe (404) ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 9999}' | jq
+  -d '{"book_id": 9999}' | jq
 echo ""
 
-echo "--- Error: user_id o book_id inválido (400) ---"
+echo "--- Error: book_id inválido (400) ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": -1, "book_id": 1}' | jq
+  -d '{"book_id": -1}' | jq
 echo ""
 
 echo "--- Error: body inválido (400) ---"
@@ -227,14 +227,14 @@ echo ""
 echo "--- Error: sin token (401) ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
-  -d '{"user_id": 1, "book_id": 1}' | jq
+  -d '{"book_id": 1}' | jq
 echo ""
 
 echo "--- Verificar copias decrementadas libro 2 ---"
 curl -s $BASE/books/2 | jq '{id, title, available_copies}'
 echo ""
 
-echo "--- Caso feliz: préstamos activos usuario 1 ---"
+echo "--- Caso feliz: préstamos activos usuario 1 (admin viendo los suyos) ---"
 curl -s $BASE/loans/users/1 \
   -H "Authorization: Bearer $TOKEN" | jq
 echo ""
@@ -242,6 +242,21 @@ echo ""
 echo "--- Caso feliz: historial usuario 1 ---"
 curl -s $BASE/loans/users/1/history \
   -H "Authorization: Bearer $TOKEN" | jq
+echo ""
+
+echo "--- Error: lector intenta ver préstamos de usuario 1 (403) ---"
+curl -s $BASE/loans/users/1 \
+  -H "Authorization: Bearer $LECTOR_TOKEN" | jq
+echo ""
+
+echo "--- Error: lector intenta ver historial de usuario 1 (403) ---"
+curl -s $BASE/loans/users/1/history \
+  -H "Authorization: Bearer $LECTOR_TOKEN" | jq
+echo ""
+
+echo "--- Caso feliz: lector ve sus propios préstamos (userId = 3) ---"
+curl -s $BASE/loans/users/3 \
+  -H "Authorization: Bearer $LECTOR_TOKEN" | jq
 echo ""
 
 echo "--- Error: sin token en loans by user (401) ---"
@@ -276,57 +291,53 @@ echo "--- Caso feliz: volver a pedir el mismo libro después de devolverlo ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 1}' | jq
+  -d '{"book_id": 1}' | jq
 echo ""
 
 echo "=== VALIDACIÓN DE COPIAS ==="
 
-echo "--- Agotar copias libro 3 (4 copias, user 3 ya tiene 1 activo, pedir 3 más con users existentes) ---"
+echo "--- Agotar copias libro 3 (4 copias, lector ya tiene 1 activo desde seed, crear 3 usuarios temporales para los slots restantes) ---"
 
 echo "--- Verificar copias iniciales de libro 3 ---"
 curl -s http://localhost:3000/books/3 | jq '{id, title, available_copies}'
 echo ""
 
-curl -s -X POST $BASE/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 3}' | jq '{id, status}'
+# Crear 3 usuarios temporales con sus tokens (autosuficiente, sin depender de seed)
+curl -s -X POST $BASE/users -H "Content-Type: application/json" \
+  -d '{"name": "Temp1", "email": "temp1@test.com", "password": "secret123", "role": "user"}' > /dev/null
+TEMP1_TOKEN=$(curl -s -X POST $BASE/auth/login -H "Content-Type: application/json" \
+  -d '{"email": "temp1@test.com", "password": "secret123"}' | jq -r '.access_token')
 
-curl -s -X POST $BASE/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 2, "book_id": 3}' | jq '{id, status}'
+curl -s -X POST $BASE/users -H "Content-Type: application/json" \
+  -d '{"name": "Temp2", "email": "temp2@test.com", "password": "secret123", "role": "user"}' > /dev/null
+TEMP2_TOKEN=$(curl -s -X POST $BASE/auth/login -H "Content-Type: application/json" \
+  -d '{"email": "temp2@test.com", "password": "secret123"}' | jq -r '.access_token')
 
-# Crear un usuario temporal para el 4to préstamo
-TEMP_USER=$(curl -s -X POST $BASE/users \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Temp User", "email": "temp@test.com", "password": "secret123", "role": "user"}')
-TEMP_ID=$(echo $TEMP_USER | jq -r '.id')
-echo "Usuario temporal creado con id: $TEMP_ID"
+curl -s -X POST $BASE/users -H "Content-Type: application/json" \
+  -d '{"name": "Temp3", "email": "temp3@test.com", "password": "secret123", "role": "user"}' > /dev/null
+TEMP3_TOKEN=$(curl -s -X POST $BASE/auth/login -H "Content-Type: application/json" \
+  -d '{"email": "temp3@test.com", "password": "secret123"}' | jq -r '.access_token')
 
-curl -s -X POST $BASE/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{\"user_id\": $TEMP_ID, \"book_id\": 3}" | jq '{id, status}'
+# slots 2, 3 y 4 de 4 (slot 1 = lector desde seed)
+curl -s -X POST $BASE/loans -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TEMP1_TOKEN" -d '{"book_id": 3}' | jq '{id, status}'
+
+curl -s -X POST $BASE/loans -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TEMP2_TOKEN" -d '{"book_id": 3}' | jq '{id, status}'
+
+curl -s -X POST $BASE/loans -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -d '{"book_id": 3}' | jq '{id, status}'
 echo ""
 
 echo "--- Verificar copias en 0 ---"
 curl -s http://localhost:3000/books/3 | jq '{id, title, available_copies}'
 echo ""
 
-echo "--- Error: sin copias disponibles con usuario existente (409) ---"
+echo "--- Error: sin copias disponibles (409) — temp3 no tiene préstamo activo del libro, error real es de stock ---"
 curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 3}' | jq
-echo ""
-
-echo "--- Trade-off documentado: usuario inexistente igual crea préstamo ---"
-curl -s -X POST $BASE/loans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 9999, "book_id": 2}' | jq
-echo "^ Esto crea el préstamo porque loans-service no valida existencia del usuario (ver README - What was intentionally left out)"
+  -H "Authorization: Bearer $TEMP3_TOKEN" \
+  -d '{"book_id": 3}' | jq
 echo ""
 
 echo "--- Health check loans-service ---"
