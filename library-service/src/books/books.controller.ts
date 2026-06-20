@@ -5,7 +5,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
-import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Book } from './book.entity';
+import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation, ApiResponse, ApiParam, ApiExcludeEndpoint } from '@nestjs/swagger';
 
 @ApiTags('books')
 @ApiBearerAuth()
@@ -16,15 +17,22 @@ export class BooksController {
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('admin')
+    @ApiOperation({ summary: 'Create a book (admin only)' })
+    @ApiResponse({ status: 201, description: 'Book created', type: Book })
+    @ApiResponse({ status: 400, description: 'Validation error' })
+    @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+    @ApiResponse({ status: 403, description: 'Requires admin role' })
     create(@Body() data: CreateBookDto) {
         return this.booksService.create(data);
     }
 
-    @ApiQuery({ name: 'author', required: false })
-    @ApiQuery({ name: 'genre', required: false })
-    @ApiQuery({ name: 'available', required: false, type: Boolean })
-    @ApiQuery({ name: 'page', required: false, type: Number })
-    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiOperation({ summary: 'List books with optional filters and pagination' })
+    @ApiQuery({ name: 'author', required: false, description: 'Filter by author name' })
+    @ApiQuery({ name: 'genre', required: false, description: 'Filter by genre' })
+    @ApiQuery({ name: 'available', required: false, type: Boolean, description: 'Filter by availability' })
+    @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page, max 100 (default: 10)' })
+    @ApiResponse({ status: 200, description: 'Paginated list of books', schema: { example: { data: [], total: 0 } } })
     @Get()
     findAll(
         @Query('author') author?: string,
@@ -43,6 +51,10 @@ export class BooksController {
     }
 
     @Get(':id')
+    @ApiOperation({ summary: 'Get a book by ID' })
+    @ApiParam({ name: 'id', description: 'Book ID', example: 1 })
+    @ApiResponse({ status: 200, description: 'Book found', type: Book })
+    @ApiResponse({ status: 404, description: 'Book not found' })
     findOne(@Param('id') id: string) {
         return this.booksService.findOne(Number(id));
     }
@@ -50,6 +62,13 @@ export class BooksController {
     @Patch(':id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('admin')
+    @ApiOperation({ summary: 'Update a book (admin only)' })
+    @ApiParam({ name: 'id', description: 'Book ID', example: 1 })
+    @ApiResponse({ status: 200, description: 'Book updated', type: Book })
+    @ApiResponse({ status: 400, description: 'Validation error' })
+    @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+    @ApiResponse({ status: 403, description: 'Requires admin role' })
+    @ApiResponse({ status: 404, description: 'Book not found' })
     update(@Param('id') id: string, @Body() data: UpdateBookDto) {
         return this.booksService.update(Number(id), data);
     }
@@ -58,12 +77,19 @@ export class BooksController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('admin')
     @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({ summary: 'Delete a book (admin only)' })
+    @ApiParam({ name: 'id', description: 'Book ID', example: 1 })
+    @ApiResponse({ status: 204, description: 'Book deleted' })
+    @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+    @ApiResponse({ status: 403, description: 'Requires admin role' })
+    @ApiResponse({ status: 404, description: 'Book not found' })
     remove(@Param('id') id: string) {
         return this.booksService.remove(Number(id));
     }
 
     @Patch(':id/copies')
     @UseGuards(JwtAuthGuard)
+    @ApiExcludeEndpoint()
     updateCopies(@Param('id') id: string, @Body('delta') delta: number, @Request() req) {
         if (req.user.role !== 'service') {
             throw new ForbiddenException('This endpoint is reserved for internal service use');
