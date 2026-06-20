@@ -1,12 +1,14 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Request, UseGuards, BadRequestException, ForbiddenException, HttpCode, HttpStatus } from '@nestjs/common';
 import { BooksService } from './books.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 
-
+@ApiTags('books')
+@ApiBearerAuth()
 @Controller('books')
 export class BooksController {
     constructor(private readonly booksService: BooksService) { }
@@ -18,6 +20,11 @@ export class BooksController {
         return this.booksService.create(data);
     }
 
+    @ApiQuery({ name: 'author', required: false })
+    @ApiQuery({ name: 'genre', required: false })
+    @ApiQuery({ name: 'available', required: false, type: Boolean })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
     @Get()
     findAll(
         @Query('author') author?: string,
@@ -26,10 +33,12 @@ export class BooksController {
         @Query('page') page = '1',
         @Query('limit') limit = '10',
     ) {
+        const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+        const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
         return this.booksService.findAll(
             { author, genre, available: available === 'true' },
-            Number(page),
-            Number(limit),
+            parsedPage,
+            parsedLimit,
         );
     }
 
@@ -55,7 +64,10 @@ export class BooksController {
 
     @Patch(':id/copies')
     @UseGuards(JwtAuthGuard)
-    updateCopies(@Param('id') id: string, @Body('delta') delta: number) {
+    updateCopies(@Param('id') id: string, @Body('delta') delta: number, @Request() req) {
+        if (req.user.role !== 'service') {
+            throw new ForbiddenException('This endpoint is reserved for internal service use');
+        }
         const d = Number(delta);
         if (!Number.isInteger(d) || d === 0) {
             throw new BadRequestException('delta must be a non-zero integer');

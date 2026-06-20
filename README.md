@@ -115,6 +115,14 @@ All requests go through **library-service** on port 3000. loans-service (port 80
 | GET | `/health` | None | library-service health check (port 3000) |
 | GET | `/health` | None | loans-service health check (port 8081 direct) |
 
+### API Documentation (Swagger)
+
+Once the service is running, the interactive Swagger UI is available at:
+
+```
+http://localhost:3000/api
+```
+
 ---
 
 ## Complete Flow Example
@@ -144,7 +152,7 @@ curl -s -X POST http://localhost:3000/loans \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"user_id":1,"book_id":1}' | jq .
-# {"id":1,"user_id":1,"book_id":1,"loaned_at":"...","returned_at":null,"status":"active"}
+# {"id":1,"user_id":1,"book_id":1,"loaned_at":"...","status":"active"}
 ```
 
 ### 4. Verify copies decremented

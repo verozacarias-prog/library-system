@@ -101,6 +101,10 @@ func (c *LibraryClient) UpdateCopies(ctx context.Context, bookID int, action str
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusConflict {
+		return ErrNoCopiesAvailable
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return ErrLibraryServiceUnavailable
 	}

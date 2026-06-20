@@ -6,7 +6,10 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateLoanDto } from './dto/create-loan.dto';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('loans')
+@ApiBearerAuth()
 @Controller('loans')
 @UseGuards(JwtAuthGuard)
 export class LoansController {
