@@ -33,8 +33,8 @@ Inter-service communication is authenticated: loans-service generates a short-li
 ### Requirements
 
 - Docker Desktop
-- Go 1.26+
-- Node.js 24+
+- Go 1.21+
+- Node.js 20+
 
 ### Run with Docker Compose
 
@@ -112,6 +112,7 @@ All requests go through **library-service** on port 3000. loans-service (port 80
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
+| GET | `/health` | None | library-service health check (port 3000) |
 | GET | `/health` | None | loans-service health check (port 8081 direct) |
 
 ---
@@ -219,7 +220,7 @@ chmod +x scripts/test_update_delete.sh
 ./scripts/test_update_delete.sh
 ```
 
-Expected: each request shows its HTTP status and response body. All status codes match expectations. Captured expected responses are in `scripts/test_results_update_delete.json`.
+Expected: each request shows its HTTP status and response body. All status codes match expectations. Captured expected responses are in `scripts/test_results_update_delete.txt`.
 
 ### 4. Run full functional tests (auth, loans, error cases)
 
@@ -238,7 +239,7 @@ Expected highlights:
 - Missing token returns `401 Unauthorized`
 - Non-admin creating a book returns `403 Forbidden`
 
-Captured expected responses are in `scripts/test_results_full.json`.
+Captured expected responses are in `scripts/test_results_full.txt`.
 
 ---
 

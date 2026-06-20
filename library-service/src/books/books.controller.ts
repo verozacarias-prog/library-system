@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { BooksService } from './books.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -48,6 +48,7 @@ export class BooksController {
     @Delete(':id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('admin')
+    @HttpCode(HttpStatus.NO_CONTENT)
     remove(@Param('id') id: string) {
         return this.booksService.remove(Number(id));
     }

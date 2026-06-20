@@ -38,6 +38,10 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		errors.Is(err, repository.ErrLoanNotFound):
 		writeErrorJSON(w, err.Error(), http.StatusNotFound)
 
+	case errors.Is(err, clients.ErrLibraryServiceUnavailable),
+		errors.Is(err, service.ErrUpdateCopies):
+		writeErrorJSON(w, clients.ErrLibraryServiceUnavailable.Error(), http.StatusServiceUnavailable)
+
 	default:
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 	}

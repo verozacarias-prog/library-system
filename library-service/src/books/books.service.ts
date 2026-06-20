@@ -56,10 +56,17 @@ export class BooksService {
     }
 
     async updateCopies(id: number, delta: number): Promise<Book> {
-        const book = await this.findOne(id);
-        const next = book.available_copies + delta;
-        if (next < 0) throw new ConflictException("not enough copies available");
-        book.available_copies = next;
-        return this.bookRepository.save(book);
+        const result = await this.bookRepository
+            .createQueryBuilder()
+            .update(Book)
+            .set({ available_copies: () => `available_copies + ${delta}` })
+            .where('id = :id AND available_copies + :delta >= 0', { id, delta })
+            .returning('*')
+            .execute();
+        if (!result.affected) {
+            await this.findOne(id);
+            throw new ConflictException('not enough copies available');
+        }
+        return result.raw[0];
     }
 }

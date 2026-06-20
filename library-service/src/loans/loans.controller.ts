@@ -5,18 +5,19 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CreateLoanDto } from './dto/create-loan.dto';
 
 @Controller('loans')
 @UseGuards(JwtAuthGuard)
 export class LoansController {
-    constructor(private readonly http: HttpService) {}
+    constructor(private readonly http: HttpService) { }
 
     private get baseUrl(): string {
         return process.env.LOANS_SERVICE_URL ?? 'http://localhost:8081';
     }
 
     @Post()
-    async create(@Body() body: { user_id: number; book_id: number }) {
+    async create(@Body() body: CreateLoanDto) {
         try {
             const { data } = await firstValueFrom(
                 this.http.post(`${this.baseUrl}/loans`, body),

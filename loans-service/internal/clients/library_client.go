@@ -52,7 +52,7 @@ func (c *LibraryClient) ValidateBook(ctx context.Context, bookID int) (*model.Bo
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrLibraryServiceUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -97,7 +97,7 @@ func (c *LibraryClient) UpdateCopies(ctx context.Context, bookID int, action str
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrLibraryServiceUnavailable, err)
 	}
 	defer resp.Body.Close()
 

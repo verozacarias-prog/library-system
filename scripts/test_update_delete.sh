@@ -93,7 +93,7 @@ curl -s -X DELETE $BASE/books/9999 \
 echo ""
 
 echo "--- Caso feliz: eliminar libro 4 (admin) ---"
-curl -s -X DELETE $BASE/books/4 \
+curl -s -o /dev/null -w "%{http_code}" -X DELETE $BASE/books/4 \
   -H "Authorization: Bearer $TOKEN" | jq
 echo ""
 
@@ -179,7 +179,7 @@ curl -s -X DELETE $BASE/users/9999 \
 echo ""
 
 echo "--- Caso feliz: admin elimina usuario 2 (carlos) ---"
-curl -s -X DELETE $BASE/users/2 \
+curl -s -o /dev/null -w "%{http_code}" -X DELETE $BASE/users/2 \
   -H "Authorization: Bearer $TOKEN" | jq
 echo ""
 
