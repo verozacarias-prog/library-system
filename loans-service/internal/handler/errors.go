@@ -7,6 +7,7 @@ import (
 
 	"github.com/verozacarias-prog/library-system/loans-service/internal/clients"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/repository"
+	"github.com/verozacarias-prog/library-system/loans-service/internal/service"
 )
 
 var (
@@ -28,14 +29,15 @@ func writeErrorJSON(w http.ResponseWriter, msg string, code int) {
 
 func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, clients.ErrBookNotFound):
-		writeErrorJSON(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, clients.ErrNoCopiesAvailable):
+	case errors.Is(err, service.ErrLoanInactive),
+		errors.Is(err, clients.ErrNoCopiesAvailable),
+		errors.Is(err, repository.ErrLoanAlreadyActive):
 		writeErrorJSON(w, err.Error(), http.StatusConflict)
-	case errors.Is(err, repository.ErrLoanNotFound):
+
+	case errors.Is(err, clients.ErrBookNotFound),
+		errors.Is(err, repository.ErrLoanNotFound):
 		writeErrorJSON(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, repository.ErrLoanAlreadyActive):
-		writeErrorJSON(w, err.Error(), http.StatusConflict)
+
 	default:
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 	}

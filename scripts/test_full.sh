@@ -253,7 +253,7 @@ curl -s -X PATCH $BASE/loans/1 \
   -H "Authorization: Bearer $TOKEN" | jq
 echo ""
 
-echo "--- Error: devolver préstamo ya devuelto (404) ---"
+echo "--- Error: devolver préstamo ya devuelto (409) ---"
 curl -s -X PATCH $BASE/loans/1 \
   -H "Authorization: Bearer $TOKEN" | jq
 echo ""

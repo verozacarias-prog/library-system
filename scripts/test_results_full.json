@@ -290,15 +290,15 @@
     "id": 4,
     "user_id": 1,
     "book_id": 2,
-    "loaned_at": "2026-06-20T00:16:26.986236Z",
+    "loaned_at": "2026-06-20T01:00:04.939262Z",
     "status": "active"
 }
 
 --- Error: préstamo duplicado - mismo user y libro activo (409) ---
 {
-    "error": "Internal Server Error",
-    "message": "Failed to update copies",
-    "statusCode": 500
+    "error": "Conflict",
+    "message": "User already has an active loan for this book",
+    "statusCode": 409
 }
 
 --- Error: libro que no existe (404) ---
@@ -341,14 +341,14 @@
         "id": 1,
         "user_id": 1,
         "book_id": 1,
-        "loaned_at": "2026-06-20T00:14:54.316102Z",
+        "loaned_at": "2026-06-20T00:59:33.622795Z",
         "status": "active"
     },
     {
         "id": 4,
         "user_id": 1,
         "book_id": 2,
-        "loaned_at": "2026-06-20T00:16:26.986236Z",
+        "loaned_at": "2026-06-20T01:00:04.939262Z",
         "status": "active"
     }
 ]
@@ -359,14 +359,14 @@
         "id": 4,
         "user_id": 1,
         "book_id": 2,
-        "loaned_at": "2026-06-20T00:16:26.986236Z",
+        "loaned_at": "2026-06-20T01:00:04.939262Z",
         "status": "active"
     },
     {
         "id": 1,
         "user_id": 1,
         "book_id": 1,
-        "loaned_at": "2026-06-20T00:14:54.316102Z",
+        "loaned_at": "2026-06-20T00:59:33.622795Z",
         "status": "active"
     }
 ]
@@ -382,16 +382,16 @@
     "id": 1,
     "user_id": 1,
     "book_id": 1,
-    "loaned_at": "2026-06-20T00:14:54.316102Z",
-    "returned_at": "2026-06-20T00:16:27.447084Z",
+    "loaned_at": "2026-06-20T00:59:33.622795Z",
+    "returned_at": "2026-06-20T01:00:05.284163Z",
     "status": "returned"
 }
 
---- Error: devolver préstamo ya devuelto (404) ---
+--- Error: devolver préstamo ya devuelto (409) ---
 {
-    "error": "Internal Server Error",
+    "error": "Conflict",
     "message": "Book already returned",
-    "statusCode": 500
+    "statusCode": 409
 }
 
 --- Error: préstamo que no existe (404) ---
@@ -414,15 +414,15 @@
         "id": 4,
         "user_id": 1,
         "book_id": 2,
-        "loaned_at": "2026-06-20T00:16:26.986236Z",
+        "loaned_at": "2026-06-20T01:00:04.939262Z",
         "status": "active"
     },
     {
         "id": 1,
         "user_id": 1,
         "book_id": 1,
-        "loaned_at": "2026-06-20T00:14:54.316102Z",
-        "returned_at": "2026-06-20T00:16:27.447084Z",
+        "loaned_at": "2026-06-20T00:59:33.622795Z",
+        "returned_at": "2026-06-20T01:00:05.284163Z",
         "status": "returned"
     }
 ]
@@ -432,7 +432,7 @@
     "id": 6,
     "user_id": 1,
     "book_id": 1,
-    "loaned_at": "2026-06-20T00:16:27.615925Z",
+    "loaned_at": "2026-06-20T01:00:05.449441Z",
     "status": "active"
 }
 
@@ -478,7 +478,7 @@ Usuario temporal creado con id: 4
     "id": 10,
     "user_id": 9999,
     "book_id": 2,
-    "loaned_at": "2026-06-20T00:16:27.980412Z",
+    "loaned_at": "2026-06-20T01:00:05.824369Z",
     "status": "active"
 }
 ^ Esto crea el préstamo porque loans-service no valida existencia del usuario (ver README - What was intentionally left out)
