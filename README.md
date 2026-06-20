@@ -1,30 +1,33 @@
 # Library Management System
 
-Distributed library management system built with NestJS and Go microservices.
+Distributed library management system — two independent microservices communicating over HTTP.
+
+| Service | Stack | Port | Database |
+|---------|-------|------|----------|
+| **library-service** | NestJS + TypeORM | 3000 | postgres-library (5432) |
+| **loans-service** | Go + Chi + pgx | 8081 (internal) | postgres-loans (5433) |
+
+---
 
 ## Architecture
-
-Two independent services communicating via HTTP:
 
 ```
 Client
   │
-  ▼ (all requests, including loans)
-library-service (NestJS, port 3000)
-  │  ├─ manages books, users, auth
-  │  └─────────── HTTP ──────────▶ loans-service (Go, port 8081)
-  │                                      │  └─ manages loan records
-  ▼                                      ▼
-postgres-library                   postgres-loans
+  ▼  (all client traffic)
+library-service  (NestJS, :3000)
+  │  ├─ books, users, auth → postgres-library
+  │  └─ proxies loan ops ──────HTTP──────▶ loans-service (Go, :8081)
+  │                                              └─ loans → postgres-loans
 ```
 
-**library-service** (Port 3000) — single entry point for all clients. Manages books, users, authentication, and proxies loan operations to loans-service.
+**library-service** is the single entry point for all clients. It manages books, users, and authentication, and proxies loan operations to loans-service.
 
-**loans-service** (Port 8081) — internal service, not directly exposed to clients. Manages loan records and validates book availability by calling library-service.
+**loans-service** is internal — not exposed directly to clients. It manages loan records and validates book availability by calling library-service on each create/return.
 
-Each service has its own PostgreSQL database — separation of concerns at the data level.
+Each service owns its own PostgreSQL database, enforcing true independence at the data layer.
 
-Inter-service communication is authenticated: loans-service generates a short-lived JWT (signed with the shared `JWT_SECRET`, `role: "service"`, 1-minute expiry) on each outbound request to library-service. library-service validates it with the standard `JwtAuthGuard`.
+**Inter-service auth:** loans-service generates a short-lived JWT (`role: "service"`, 1-min expiry) signed with the shared `JWT_SECRET` on every outbound call. library-service validates it with the standard `JwtAuthGuard` — no new auth mechanism needed.
 
 ---
 
@@ -42,33 +45,31 @@ Inter-service communication is authenticated: loans-service generates a short-li
 docker compose up --build
 ```
 
-This starts 4 containers: library-service, loans-service, postgres-library, postgres-loans.
+Starts 4 containers: library-service, loans-service, postgres-library, postgres-loans.
 
-The loans-service waits for postgres-loans to be healthy before starting (via Docker healthcheck).
+loans-service waits for postgres-loans to be healthy before starting (Docker healthcheck). The loans schema is applied automatically on first run from `loans-service/db/schema.sql`.
 
-The loans schema is applied automatically on first run from `loans-service/db/schema.sql`.
-
-> **Note on data persistence:** Use `docker compose down` (without `-v`) to stop containers while preserving database data. Only use `docker compose down -v` if you want to reset all data. Named volumes are declared in `docker-compose.yml` to ensure persistence across restarts.
+> **Data persistence:** Use `docker compose down` (without `-v`) to stop while keeping data. `docker compose down -v` resets everything.
 
 ### Environment variables
 
-Copy `.env.example` to `.env` and fill in the values before running locally without Docker.
+Copy `.env.example` to `.env` before running locally without Docker.
 
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/library_db
 LOANS_SERVICE_URL=http://localhost:8081
-JWT_SECRET=your_secret_here
 LIBRARY_SERVICE_URL=http://localhost:3000
+JWT_SECRET=your_secret_here
 PORT=3000
 ```
 
-> **Note:** JWT_SECRET must never be hardcoded in production. Use a secrets manager or external environment variable injection. Both services must share the same JWT_SECRET value.
+> **Note:** Both services must share the same `JWT_SECRET`. Never hardcode it in production — use a secrets manager.
 
 ---
 
 ## API Reference
 
-All requests go through **library-service** on port 3000. loans-service (port 8081) is internal only.
+All client requests go through **library-service** on port 3000. Swagger UI is available at `http://localhost:3000/api` when the stack is running.
 
 ### Auth
 
@@ -95,7 +96,7 @@ All requests go through **library-service** on port 3000. loans-service (port 80
 | POST | `/books` | JWT + admin | Create book |
 | PATCH | `/books/:id` | JWT + admin | Update book |
 | DELETE | `/books/:id` | JWT + admin | Delete book |
-| PATCH | `/books/:id/copies` | JWT (internal) | Update available copies — called by loans-service |
+| PATCH | `/books/:id/copies` | JWT (internal) | Update available copies — called by loans-service only |
 
 **Filters for `GET /books`:** `?author=&genre=&available=true&page=1&limit=10`
 
@@ -106,83 +107,71 @@ All requests go through **library-service** on port 3000. loans-service (port 80
 | POST | `/loans` | JWT | Create loan (proxied to loans-service) |
 | PATCH | `/loans/:id` | JWT | Return a book (proxied to loans-service) |
 | GET | `/loans/users/:userId` | JWT | Active loans for a user |
-| GET | `/loans/users/:userId/history` | JWT | Loan history for a user |
+| GET | `/loans/users/:userId/history` | JWT | Full loan history for a user |
 
 ### Health
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/health` | None | library-service health check (port 3000) |
-| GET | `/health` | None | loans-service health check (port 8081 direct) |
+| Method | Endpoint | Service |
+|--------|----------|---------|
+| GET `/health` | port 3000 | library-service |
+| GET `/health` | port 8081 | loans-service (direct) |
 
-### API Documentation (Swagger)
+---
 
-Once the service is running, the interactive Swagger UI is available at:
+## Role Permissions
 
-```
-http://localhost:3000/api
-```
+| Action | admin | user |
+|--------|-------|------|
+| Register / Login | ✅ | ✅ |
+| List / Get books | ✅ | ✅ |
+| Create / Update / Delete book | ✅ | ❌ |
+| List all users | ✅ | ❌ |
+| Get / Update own user | ✅ | ✅ |
+| Change a user's role | ✅ | ❌ |
+| Delete user | ✅ | ❌ |
+| Create / Return loan | ✅ | ✅ |
+| View active loans / history | ✅ | ✅ |
+
+> Loan endpoints require authentication but do not restrict by role — any authenticated user can borrow and return books. Suggested improvement: restrict `GET /loans/users/:userId` so regular users can only query their own loans (validate `:userId` matches the JWT `sub`).
 
 ---
 
 ## Complete Flow Example
 
-Step-by-step curl commands for the full loan lifecycle.
-
-### 1. Login as admin
-
 ```bash
+# 1. Login as admin
 TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@library.com","password":"adminpass"}' \
   | jq -r '.access_token')
-```
 
-### 2. Check a book (no auth required)
-
-```bash
+# 2. Check a book (no auth required)
 curl -s http://localhost:3000/books/1 | jq '{id,title,author,available_copies}'
 # {"id":1,"title":"The Go Programming Language","author":"Alan Donovan","available_copies":3}
-```
 
-### 3. Create a loan
-
-```bash
+# 3. Create a loan
 curl -s -X POST http://localhost:3000/loans \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"user_id":1,"book_id":1}' | jq .
 # {"id":1,"user_id":1,"book_id":1,"loaned_at":"...","status":"active"}
-```
 
-### 4. Verify copies decremented
-
-```bash
+# 4. Verify copies decremented
 curl -s http://localhost:3000/books/1 | jq .available_copies
 # 2  (was 3)
-```
 
-### 5. Return the book
-
-```bash
+# 5. Return the book
 curl -s -X PATCH http://localhost:3000/loans/1 \
   -H "Authorization: Bearer $TOKEN" | jq .
-# {"id":1,"user_id":1,"book_id":1,"loaned_at":"...","returned_at":"...","status":"returned"}
-```
+# {"id":1,...,"returned_at":"...","status":"returned"}
 
-### 6. Verify copies restored
-
-```bash
+# 6. Verify copies restored
 curl -s http://localhost:3000/books/1 | jq .available_copies
 # 3  (restored)
-```
 
-### 7. View loan history
-
-```bash
+# 7. View loan history
 curl -s http://localhost:3000/loans/users/1/history \
   -H "Authorization: Bearer $TOKEN" | jq .
-# [{"id":1,"status":"returned",...}]
 ```
 
 ---
@@ -193,18 +182,13 @@ All tests run against `http://localhost:3000` after `docker compose up --build`.
 
 ### 1. Seed the database
 
-A seed script creates the initial test data: 2 admin users, 1 regular user, 4 books, and 3 loans.
-
 ```bash
-chmod +x scripts/seed.sh
-./scripts/seed.sh
+chmod +x scripts/seed.sh && ./scripts/seed.sh
 ```
 
-Expected output: 3 users created, 4 books created, 3 loans created.
+Creates 2 admin users, 1 regular user, 4 books, and 3 loans.
 
 ### 2. Verify database state
-
-Confirm data was persisted correctly in both databases:
 
 ```bash
 # Users and books (library-service DB)
@@ -219,41 +203,66 @@ docker exec -it library-system-postgres-loans-1 psql -U postgres -d loans_db \
   -c "SELECT * FROM loans;"
 ```
 
-### 3. Run CRUD and validation tests (books & users)
-
-Tests UPDATE and DELETE operations for books and users, covering all validation edge cases (invalid fields, missing auth, wrong role, not found, etc.).
+### 3. CRUD and validation tests
 
 ```bash
-chmod +x scripts/test_update_delete.sh
-./scripts/test_update_delete.sh
+chmod +x scripts/test_update_delete.sh && ./scripts/test_update_delete.sh
 ```
 
-Expected: each request shows its HTTP status and response body. All status codes match expectations. Captured expected responses are in `scripts/test_results_update_delete.txt`.
+Tests UPDATE and DELETE for books and users, covering validation edge cases (invalid fields, missing auth, wrong role, not found). Expected responses captured in `scripts/test_results_update_delete.txt`.
 
-### 4. Run full functional tests (auth, loans, error cases)
-
-Tests the complete loan lifecycle: create loan → verify copies decremented → return book → verify copies restored → view history. Also covers error cases: no copies available, duplicate loan, missing auth, wrong role.
+### 4. Full functional tests
 
 ```bash
-chmod +x scripts/test_full.sh
-./scripts/test_full.sh
+chmod +x scripts/test_full.sh && ./scripts/test_full.sh
 ```
 
-Expected highlights:
-- Loan creation returns `201` with `status: "active"`
+Tests the complete loan lifecycle and error cases. Expected highlights:
+- Loan creation → `201` with `status: "active"`
 - Available copies decrement after loan, increment after return
-- Second loan for same user + book returns `409 Conflict`
-- Exhausting all copies returns `409 Conflict`
-- Missing token returns `401 Unauthorized`
-- Non-admin creating a book returns `403 Forbidden`
+- Second loan for same user + book → `409 Conflict`
+- Exhausting all copies → `409 Conflict`
+- Missing token → `401 Unauthorized`
+- Non-admin creating a book → `403 Forbidden`
 
-Captured expected responses are in `scripts/test_results_full.txt`.
+Captured expected responses in `scripts/test_results_full.txt`.
+
+---
+
+## Development
+
+### library-service (NestJS)
+
+```bash
+cd library-service
+npm ci                  # install deps
+npm run start:dev       # dev mode with watch
+npm test                # unit tests
+npm run test:cov        # with coverage
+npm run test:e2e        # e2e tests
+npm run lint            # lint + fix
+npm run build           # compile to dist/
+
+# Run a single test file
+npx jest src/books/books.service.spec.ts
+```
+
+### loans-service (Go)
+
+```bash
+cd loans-service
+go test ./internal/...               # all unit tests
+go test ./internal/service/...       # service layer only
+go test ./internal/handler/...       # handler layer only
+go build ./cmd/api/...               # compile
+go vet ./...                         # lint
+```
 
 ---
 
 ## CI
 
-GitHub Actions runs the unit test suite for both services on every push and pull request.
+GitHub Actions runs unit tests for both services on every push and pull request.
 
 ```
 .github/workflows/ci.yml
@@ -261,7 +270,7 @@ GitHub Actions runs the unit test suite for both services on every push and pull
 └── test-loans-service     → go test ./internal/...  (Go 1.21)
 ```
 
-No database or Docker is required — all tests use mocks.
+No database or Docker required — all tests use mocks.
 
 ---
 
@@ -269,137 +278,96 @@ No database or Docker is required — all tests use mocks.
 
 ### loans-service (Go)
 
-**HTTP Framework: Chi over Gin**
-Chi is closer to the standard library, more idiomatic Go, and easier to test. Gin adds magic that hides what the router is doing. Since test coverage is a goal, Chi was the better fit.
+**HTTP Framework: Chi**
+Chi is closer to the standard library and more idiomatic Go than Gin, which adds routing magic that hides what's happening. Since testability is a goal, Chi was the better fit.
 
 **Database driver: pgx over GORM**
-GORM abstracts SQL in ways that can hide performance problems and errors. Using `pgx` directly with `database/sql` shows explicit control over queries and transactions. In a technical assessment, this communicates more about the candidate than GORM would.
+`pgx` with `database/sql` shows explicit control over queries. GORM can hide performance problems behind abstraction — in a technical assessment, raw SQL communicates more than an ORM.
 
 **Two separate PostgreSQL instances**
 Each service owns its data completely. A shared database creates coupling at the data layer — if library-service changes its schema, loans-service breaks. Two instances enforce true independence. Trade-off: higher resource usage. Justified for a microservices architecture.
 
 **Multi-stage Docker build**
-The final image contains only the compiled binary and Alpine Linux (~5MB + binary). No Go compiler, no source code. Smaller attack surface, faster deploy.
+Final image contains only the compiled binary + Alpine Linux (~5MB + binary). No Go compiler, no source code.
 
-**Constants centralized per layer**
-SQL queries live in `repository/constants.go`. Domain status values (`active`, `returned`) and copy actions (`increment`, `decrement`) live in `internal/constants.go`. Error variables live in `errors.go` files per layer (repository, service, handler, clients).
+**Project structure and constants**
+- SQL queries live in `repository/constants.go`
+- Domain status values (`active`, `returned`) and copy actions (`increment`, `decrement`) live in `service/constants.go`
+- Errors are declared per-layer in `errors.go` files (`repository`, `service`, `handler`, `clients`)
 
-**BookServiceClient as interface defined in service layer**
-Following dependency inversion: the service layer defines the interface it needs (`BookServiceClient`), and the concrete implementation (`clients/library_client.go`) implements it implicitly (Go duck typing). This keeps the service layer independent of HTTP details and makes it fully testable with mocks.
+**Dependency inversion on BookServiceClient**
+The service layer defines the interface it needs (`BookService`); the concrete implementation (`clients/library_client.go`) satisfies it via Go duck typing. This keeps the service layer independent of HTTP details and fully testable with mocks.
 
-**Factory pattern (internal/app.go)**
-All infrastructure dependencies (pool, repository, service) are constructed in one place. `main.go` only creates the HTTP layer (handler, router) and wires it together. The factory does not include the HTTP framework to avoid coupling infrastructure with transport.
+**Factory pattern (`internal/app.go`)**
+All infrastructure (pgx pool, repository, service) is constructed in one place. `cmd/api/main.go` only wires the HTTP layer. The factory deliberately excludes the HTTP framework to avoid coupling infrastructure with transport.
 
-**Schema with partial unique index**
+**Schema: partial unique index**
 ```sql
 CREATE UNIQUE INDEX ON loans(user_id, book_id) WHERE status = 'active';
 ```
-A user cannot have the same book twice on active loan simultaneously. Once returned, they can borrow it again. A simple UNIQUE constraint would prevent that.
+Prevents duplicate active loans for the same user+book while allowing re-borrow after return. A simple UNIQUE constraint would block that.
 
-**PATCH /loans/:id for returns**
-Instead of a `/loans/:id/return` verb-in-URL pattern, a `PATCH /loans/:id` was used. The service layer method `BookReturned` always sets the status to `returned` — the status is a consequence of the operation, not an input from the client.
+**`PATCH /loans/:id` for returns**
+Instead of a verb-in-URL pattern (`/return`), `PATCH /loans/:id` represents a state transition. The service layer method `BookReturned` always sets status to `returned` — the status is a consequence of the operation, not an input from the client.
 
-**Inter-service authentication with short-lived JWT**
-loans-service generates a JWT signed with the shared `JWT_SECRET` (`role: "service"`, 1-minute expiry) on each outbound call to library-service. library-service validates it with the standard `JwtAuthGuard` — no new authentication mechanism needed. The short expiry limits the blast radius of a leaked token in transit.
+**Inter-service auth: short-lived JWT**
+loans-service generates a JWT (`role: "service"`, 1-min expiry) signed with the shared `JWT_SECRET` on each outbound call. library-service validates it with the standard `JwtAuthGuard`. Short expiry limits blast radius of a token leaked in transit.
 
-**library-service unavailable → 503**
-Network errors from `http.Client.Do()` are wrapped with `ErrLibraryServiceUnavailable` using `fmt.Errorf("%w: %w", ...)`, so `errors.Is()` can unwrap them at the handler layer and return a clean `503 Service Unavailable` instead of a raw error string.
+**503 on library-service unavailable**
+Network errors from `http.Client.Do()` are wrapped as `ErrLibraryServiceUnavailable`, unwrapped at the handler layer with `errors.Is()`, and returned as clean `503 Service Unavailable`.
 
 **Distributed transaction handling**
-Loan creation and return both involve two systems (loans DB + library-service copy count). To maintain consistency:
-- On **loan creation**: copies are decremented first, then the loan is persisted. If the DB insert fails, a compensating increment call is made to restore the count.
-- On **loan return**: the loan is fetched first (to get the bookID), copies are incremented, then the loan status is updated. If the status update fails, a compensating decrement call restores the count.
+Loan operations span two systems (loans DB + library-service copy count). Best-effort consistency via compensating calls:
 
-This is best-effort consistency — not a distributed transaction. A failure in the compensating call would leave the systems out of sync, which is a known trade-off documented under "What was intentionally left out."
+| Operation | Step 1 | Step 2 | On step 2 failure |
+|-----------|--------|--------|-------------------|
+| Create loan | Decrement copies | Insert loan record | Compensating increment |
+| Return book | Increment copies | Update loan status | Compensating decrement |
+
+A failure in the compensating call leaves systems out of sync — a known trade-off. Production would use an outbox pattern or saga coordinator.
 
 ---
 
 ### library-service (NestJS)
 
 **TypeORM over Prisma**
-TypeORM is more mature for complex relational mappings and has better TypeScript integration with NestJS decorators. Both were valid choices — TypeORM was selected for stability.
+TypeORM has more mature complex relational mappings and better TypeScript integration with NestJS decorators. Both were valid — TypeORM was selected for stability.
 
-**autoLoadEntities: true**
-Instead of listing every entity in `TypeOrmModule.forRoot()`, each module registers its own entity with `forFeature()`. Scales better as the number of entities grows.
+**`autoLoadEntities: true`**
+Each module registers its own entity with `forFeature()` instead of listing all entities in `TypeOrmModule.forRoot()`. Scales better as the entity count grows.
 
-**synchronize: true**
-TypeORM automatically creates/updates tables based on entity definitions. Appropriate for development and this assessment. In production, use migrations (`typeorm migration:generate` + `typeorm migration:run`).
+**`synchronize: true`**
+TypeORM auto-creates/updates tables from entity definitions. Appropriate for development and this assessment. In production: use `typeorm migration:generate` + `typeorm migration:run`.
 
 **JWT with Passport**
-`@nestjs/passport` + `passport-jwt` is the standard NestJS authentication pattern. The `JwtStrategy` validates the token from the `Authorization: Bearer` header. `JwtAuthGuard` is applied per-endpoint with `@UseGuards()`.
+`@nestjs/passport` + `passport-jwt` is the standard NestJS auth pattern. `JwtStrategy` validates the `Authorization: Bearer` header. `JwtAuthGuard` is applied per-endpoint with `@UseGuards()`.
 
-**Role-based access control with custom decorator + guard**
-`@Roles('admin')` decorator stores metadata on the endpoint. `RolesGuard` reads that metadata via `Reflector` and compares it against the role in the JWT payload. Endpoints without `@Roles` are accessible to any authenticated user. Only admins can change a user's role via `PATCH /users/:id`.
+**Role-based access: custom decorator + guard**
+`@Roles('admin')` stores metadata on the endpoint. `RolesGuard` reads it via `Reflector` and compares against the JWT payload role. Endpoints without `@Roles` are accessible to any authenticated user.
 
-**Input validation with class-validator**
-All endpoints use typed DTOs with `class-validator` decorators. A global `ValidationPipe` (whitelist + forbidNonWhitelisted) is applied in `main.ts`, rejecting unknown fields and validating types at the boundary. This includes the loans proxy — `POST /loans` validates `user_id` and `book_id` via `CreateLoanDto` before forwarding to loans-service.
+**Input validation: class-validator**
+All endpoints use typed DTOs with `class-validator` decorators. Global `ValidationPipe` (`whitelist + forbidNonWhitelisted`) in `main.ts` rejects unknown fields at the boundary — including the loans proxy, which validates `user_id` and `book_id` before forwarding.
 
 **Atomic copy update**
-`updateCopies` uses a single `UPDATE ... SET available_copies = available_copies + $delta WHERE available_copies + $delta >= 0 RETURNING *` query instead of a read-modify-write cycle. This eliminates the race condition where two concurrent loan requests could both read the same copy count and produce an incorrect result.
+`updateCopies` uses a single `UPDATE ... SET available_copies = available_copies + $delta WHERE available_copies + $delta >= 0 RETURNING *`. Eliminates the race condition where two concurrent loan requests could both read the same copy count.
 
 **Passwords hashed with bcrypt (salt rounds: 10)**
-Passwords are never stored or returned in plain text. The `Omit<User, 'password'>` TypeScript type ensures the password field is excluded at the type level from all service responses.
+Never stored or returned in plain text. `Omit<User, 'password'>` excludes the field at the type level from all service responses.
 
 **Pagination with QueryBuilder**
-`findAll` uses TypeORM's `createQueryBuilder` to support dynamic filters (author, genre, availability) combined with `skip/take` for pagination. Returns `{ data, total }` so the client can implement pagination UI.
+`findAll` uses TypeORM's `createQueryBuilder` for dynamic filters (author, genre, availability) combined with `skip/take`. Returns `{ data, total }` for client-side pagination.
 
 ---
 
 ## Testing
 
-```bash
-# loans-service
-cd loans-service
-go test ./internal/service/...
-go test ./internal/handler/...
+| Service | Command | What's covered |
+|---------|---------|----------------|
+| loans-service | `go test ./internal/service/...` | CreateLoan happy path, book not available, BookReturned, GetActiveLoans |
+| loans-service | `go test ./internal/handler/...` | CreateLoan 201, invalid body 400 |
+| library-service | `npm test` | BooksService (create, findOne, updateCopies), AuthService (valid login, user not found, wrong password) |
 
-# library-service
-cd library-service
-npm test
-```
-
-**loans-service:** unit tests — service layer (CreateLoan happy path, book not available, BookReturned, GetActiveLoans) and handler layer (CreateLoan 201, invalid body 400). Mocks used for repository and LibraryClient — no database required.
-
-**library-service:** unit tests — BooksService (create, findOne not found, updateCopies) and AuthService (valid login, user not found, wrong password). Mocks used for TypeORM repository and JwtService.
-
-Tests also run automatically on every push via GitHub Actions (see [CI](#ci) section).
-
----
-
-## Role permissions
-
-| Action | admin | user |
-|--------|-------|------|
-| Register account | ✅ | ✅ |
-| Login | ✅ | ✅ |
-| List books / Get book | ✅ | ✅ |
-| Create / Update / Delete book | ✅ | ❌ |
-| List all users | ✅ | ❌ |
-| Get / Update own user | ✅ | ✅ |
-| Change a user's role | ✅ | ❌ |
-| Delete user | ✅ | ❌ |
-| Create loan | ✅ | ✅ |
-| Return book | ✅ | ✅ |
-| View active loans for a user | ✅ | ✅ |
-| View loan history for a user | ✅ | ✅ |
-
-The assessment specifies "read and their loans" for regular users. This was interpreted as: any authenticated user can manage loans (create and return), since a borrowing system where only admins can register loans would not be functional for end users. Loan endpoints do not restrict by role — only by authentication.
-
-**Suggested improvement:** `GET /loans/users/:userId` currently allows any authenticated user to view another user's loans. A natural next step would be to restrict this so regular users can only query their own loans (validating that `:userId` matches the `sub` from the JWT), while admins retain access to any user's loans.
-
----
-
-## What was intentionally left out
-
-- **gRPC between services:** HTTP was kept for simplicity and consistency. gRPC would be the natural next step to reduce inter-service latency.
-- **TypeORM migrations:** `synchronize: true` is used for this assessment. In production, replace with `typeorm migration:generate` + `typeorm migration:run` to get versioned, reversible schema changes.
-- **User existence validation in loans-service:** loans-service does not call library-service to verify that the userId is valid before creating a loan. A dedicated `/users/:id` validation call could be added, but adds latency for the common path.
-- **Loan access restriction by ownership:** any authenticated user can currently view any other user's loans. Restricting `GET /loans/users/:userId` to the owner (or admin) is a straightforward improvement not implemented in this version.
-- **Compensating transaction reliability:** if the compensating call (copy revert) fails after a DB error, the two systems will be out of sync. A production implementation would use an outbox pattern or saga coordinator. Out of scope for this assessment.
-- **Rate limiting:** out of scope for this assessment.
-- **Frontend:** explicitly excluded by the assessment.
-- **Kubernetes / service mesh:** explicitly excluded by the assessment.
-- **Repository integration tests:** require a running database instance. Prioritized unit tests for business logic coverage.
+All tests use mocks — no running database required. Tests also run automatically on every push via GitHub Actions.
 
 ---
 
@@ -407,78 +375,44 @@ The assessment specifies "read and their loans" for regular users. This was inte
 
 ```
 library-system/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                # GitHub Actions — runs tests on push/PR
+├── .github/workflows/ci.yml          # GitHub Actions — tests on push/PR
 ├── docker-compose.yml
 ├── .env.example
 ├── scripts/
-│   ├── seed.sh                   # creates test users, books, loans
-│   ├── test_update_delete.sh     # CRUD + validation tests for books and users
-│   └── test_full.sh              # auth, loans lifecycle, and error cases
-├── library-service/              # NestJS — books, users, auth, loans proxy
-│   ├── src/
-│   │   ├── books/
-│   │   │   ├── book.entity.ts
-│   │   │   ├── books.module.ts
-│   │   │   ├── books.service.ts
-│   │   │   ├── books.service.spec.ts
-│   │   │   ├── books.controller.ts
-│   │   │   └── dto/
-│   │   │       ├── create-book.dto.ts
-│   │   │       └── update-book.dto.ts
-│   │   ├── users/
-│   │   │   ├── user.entity.ts
-│   │   │   ├── users.module.ts
-│   │   │   ├── users.service.ts
-│   │   │   ├── users.controller.ts
-│   │   │   └── dto/
-│   │   │       ├── create-user.dto.ts
-│   │   │       └── update-user.dto.ts
-│   │   ├── loans/                    # proxy to loans-service
-│   │   │   ├── loans.module.ts
-│   │   │   ├── loans.controller.ts
-│   │   │   └── dto/
-│   │   │       └── create-loan.dto.ts
-│   │   └── auth/
-│   │       ├── auth.module.ts
-│   │       ├── auth.service.ts
-│   │       ├── auth.service.spec.ts
-│   │       ├── auth.controller.ts
-│   │       ├── jwt.strategy.ts
-│   │       ├── jwt-auth.guard.ts
-│   │       ├── roles.guard.ts
-│   │       └── roles.decorator.ts
-│   └── Dockerfile
-└── loans-service/                # Go — loans management
-    ├── cmd/api/main.go
+│   ├── seed.sh                        # creates test users, books, loans
+│   ├── test_update_delete.sh          # CRUD + validation tests
+│   └── test_full.sh                   # auth, loans lifecycle, error cases
+│
+├── library-service/                   # NestJS — books, users, auth, loans proxy
+│   └── src/
+│       ├── auth/                      # JWT strategy, guards, decorators
+│       ├── books/                     # CRUD + atomic copy update
+│       ├── users/                     # CRUD + bcrypt
+│       └── loans/                     # thin HTTP proxy to loans-service
+│
+└── loans-service/                     # Go — loans management
+    ├── cmd/api/main.go                # HTTP wiring only
     ├── internal/
-    │   ├── app.go
-    │   ├── constants.go
-    │   ├── clients/
-    │   │   ├── library_client.go
-    │   │   └── errors.go
-    │   ├── handler/
-    │   │   ├── loan_handler.go
-    │   │   ├── loan_handler_test.go
-    │   │   ├── mocks_test.go
-    │   │   ├── routes.go
-    │   │   └── errors.go
-    │   ├── service/
-    │   │   ├── loan_service.go
-    │   │   ├── loan_service_test.go
-    │   │   ├── mocks_test.go
-    │   │   ├── library_client.go
-    │   │   └── errors.go
-    │   ├── repository/
-    │   │   ├── loan_repository.go
-    │   │   ├── db.go
-    │   │   ├── constants.go
-    │   │   └── errors.go
-    │   └── model/
-    │       ├── loan.go
-    │       └── book.go
-    ├── db/schema.sql
-    ├── Dockerfile
-    └── go.mod
+    │   ├── app.go                     # factory: pool → repository → service
+    │   ├── clients/                   # HTTP client for library-service
+    │   ├── handler/                   # Chi handlers, error mapping
+    │   ├── service/                   # business logic, interfaces
+    │   ├── repository/                # pgx queries, SQL constants
+    │   └── model/                     # Loan, Book, request types
+    └── db/schema.sql                  # applied on first container boot
 ```
+
+---
+
+## What was intentionally left out
+
+| Item | Reason |
+|------|--------|
+| TypeORM migrations | `synchronize: true` is used. Production path: `migration:generate` + `migration:run` |
+| gRPC between services | HTTP kept for simplicity. gRPC is the natural next step to reduce latency |
+| User existence validation in loans-service | Would add a round-trip to library-service on every loan creation |
+| Loan access restriction by ownership | `GET /loans/users/:userId` allows any authenticated user to view any user's loans |
+| Compensating transaction reliability | Outbox/saga not implemented — a failed compensating call leaves systems out of sync |
+| Rate limiting | Out of scope for this assessment |
+| Frontend / Kubernetes | Explicitly excluded by the assessment |
+| Repository integration tests | Require a running database; prioritized unit tests for business logic |

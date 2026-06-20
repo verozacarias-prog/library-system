@@ -54,7 +54,7 @@ func (r *LoanRepository) GetActiveByUser(ctx context.Context, userID int) ([]mod
 	}
 	defer rows.Close()
 
-	var loans []model.Loan
+	loans := make([]model.Loan, 0)
 	for rows.Next() {
 		var l model.Loan
 		if err := rows.Scan(&l.ID, &l.UserID, &l.BookID, &l.LoanedAt, &l.ReturnedAt, &l.Status); err != nil {
@@ -75,7 +75,7 @@ func (r *LoanRepository) GetHistoryByUser(ctx context.Context, userID int) ([]mo
 	}
 	defer rows.Close()
 
-	var loans []model.Loan
+	loans := make([]model.Loan, 0)
 	for rows.Next() {
 		var l model.Loan
 		if err := rows.Scan(&l.ID, &l.UserID, &l.BookID, &l.LoanedAt, &l.ReturnedAt, &l.Status); err != nil {
