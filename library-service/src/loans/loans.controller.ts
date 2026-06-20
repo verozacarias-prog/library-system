@@ -1,6 +1,6 @@
 import {
     Controller, Post, Patch, Get, Param, Body, UseGuards,
-    HttpException, HttpStatus,
+    HttpException, HttpStatus, Req, ForbiddenException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -21,15 +21,16 @@ export class LoansController {
     }
 
     @Post()
-    @ApiOperation({ summary: 'Create a loan' })
+    @ApiOperation({ summary: 'Create a loan — user_id is taken from the JWT, not the request body' })
     @ApiResponse({ status: 201, description: 'Loan created', type: LoanResponseDto })
     @ApiResponse({ status: 400, description: 'Validation error' })
     @ApiResponse({ status: 401, description: 'Missing or invalid token' })
     @ApiResponse({ status: 409, description: 'No copies available or user already has this book on loan' })
-    async create(@Body() body: CreateLoanDto) {
+    async create(@Body() body: CreateLoanDto, @Req() req: any) {
+        const userId = (req.user as any).id;
         try {
             const { data } = await firstValueFrom(
-                this.http.post(`${this.baseUrl}/loans`, body),
+                this.http.post(`${this.baseUrl}/loans`, { user_id: userId, book_id: body.book_id }),
             );
             return data;
         } catch (err: any) {
@@ -60,11 +61,16 @@ export class LoansController {
     }
 
     @Get('users/:userId')
-    @ApiOperation({ summary: 'Get active loans for a user' })
+    @ApiOperation({ summary: 'Get active loans for a user (own data or admin only)' })
     @ApiParam({ name: 'userId', description: 'User ID', example: 1 })
     @ApiResponse({ status: 200, description: 'Active loans', type: [LoanResponseDto] })
     @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-    async getActiveLoans(@Param('userId') userId: string) {
+    @ApiResponse({ status: 403, description: 'Access denied — you can only view your own loans' })
+    async getActiveLoans(@Param('userId') userId: string, @Req() req: any) {
+        const user = req.user as any;
+        if (user.id !== Number(userId) && user.role !== 'admin') {
+            throw new ForbiddenException('You can only view your own loans');
+        }
         try {
             const { data } = await firstValueFrom(
                 this.http.get(`${this.baseUrl}/loans/users/${userId}`),
@@ -78,11 +84,16 @@ export class LoansController {
     }
 
     @Get('users/:userId/history')
-    @ApiOperation({ summary: 'Get full loan history for a user' })
+    @ApiOperation({ summary: 'Get full loan history for a user (own data or admin only)' })
     @ApiParam({ name: 'userId', description: 'User ID', example: 1 })
     @ApiResponse({ status: 200, description: 'All loans (active and returned)', type: [LoanResponseDto] })
     @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-    async getLoanHistory(@Param('userId') userId: string) {
+    @ApiResponse({ status: 403, description: 'Access denied — you can only view your own loan history' })
+    async getLoanHistory(@Param('userId') userId: string, @Req() req: any) {
+        const user = req.user as any;
+        if (user.id !== Number(userId) && user.role !== 'admin') {
+            throw new ForbiddenException('You can only view your own loan history');
+        }
         try {
             const { data } = await firstValueFrom(
                 this.http.get(`${this.baseUrl}/loans/users/${userId}/history`),

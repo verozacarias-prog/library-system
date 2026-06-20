@@ -20,12 +20,22 @@ USER=$(curl -s -X POST $BASE/users \
 echo "Usuario normal: $USER" | jq .
 
 echo ""
-echo "=== Login como admin ==="
+echo "=== Login como cada usuario ==="
 
 TOKEN=$(curl -s -X POST $BASE/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "vero@test.com", "password": "secret123"}' | jq -r '.access_token')
-echo "Token obtenido: ${TOKEN:0:30}..."
+echo "Token vero (admin): ${TOKEN:0:30}..."
+
+CARLOS_TOKEN=$(curl -s -X POST $BASE/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "carlos@test.com", "password": "secret123"}' | jq -r '.access_token')
+echo "Token carlos (admin): ${CARLOS_TOKEN:0:30}..."
+
+LECTOR_TOKEN=$(curl -s -X POST $BASE/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "lector@test.com", "password": "secret123"}' | jq -r '.access_token')
+echo "Token lector (user): ${LECTOR_TOKEN:0:30}..."
 
 echo ""
 echo "=== Creando libros ==="
@@ -55,29 +65,29 @@ BOOK4=$(curl -s -X POST $BASE/books \
 echo "Libro 4: $BOOK4" | jq .
 
 echo ""
-echo "=== Creando préstamos ==="
+echo "=== Creando préstamos (cada usuario crea su propio préstamo) ==="
 
 LOAN1=$(curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 1, "book_id": 1}')
-echo "Préstamo 1 (user 1 - libro 1): $LOAN1" | jq .
+  -d '{"book_id": 1}')
+echo "Préstamo 1 (vero - libro 1): $LOAN1" | jq .
 
 LOAN2=$(curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 2, "book_id": 2}')
-echo "Préstamo 2 (user 2 - libro 2): $LOAN2" | jq .
+  -H "Authorization: Bearer $CARLOS_TOKEN" \
+  -d '{"book_id": 2}')
+echo "Préstamo 2 (carlos - libro 2): $LOAN2" | jq .
 
 LOAN3=$(curl -s -X POST $BASE/loans \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user_id": 3, "book_id": 3}')
-echo "Préstamo 3 (user 3 - libro 3): $LOAN3" | jq .
+  -H "Authorization: Bearer $LECTOR_TOKEN" \
+  -d '{"book_id": 3}')
+echo "Préstamo 3 (lector - libro 3): $LOAN3" | jq .
 
 echo ""
 echo "=== Estado final ==="
 echo "Libros:"
 curl -s $BASE/books | jq '.data[] | {id, title, available_copies}'
-echo "Préstamos activos user 1:"
+echo "Préstamos activos vero (user 1):"
 curl -s $BASE/loans/users/1 -H "Authorization: Bearer $TOKEN" | jq .
