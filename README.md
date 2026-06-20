@@ -404,15 +404,21 @@ library-system/
 
 ---
 
-## What was intentionally left out
+## What Was Left Out / Known Limitations
 
-| Item | Reason |
-|------|--------|
-| TypeORM migrations | `synchronize: true` is used. Production path: `migration:generate` + `migration:run` |
-| gRPC between services | HTTP kept for simplicity. gRPC is the natural next step to reduce latency |
-| User existence validation in loans-service | Would add a round-trip to library-service on every loan creation |
-| Loan access restriction by ownership | `GET /loans/users/:userId` allows any authenticated user to view any user's loans |
-| Compensating transaction reliability | Outbox/saga not implemented — a failed compensating call leaves systems out of sync |
-| Rate limiting | Out of scope for this assessment |
-| Frontend / Kubernetes | Explicitly excluded by the assessment |
-| Repository integration tests | Require a running database; prioritized unit tests for business logic |
+### Conscious design decisions
+
+| Item | Decision & Reasoning | Risk / Production Fix |
+|------|------------------------|--------------------------|
+| Cross-service consistency on loan creation/return | No real ACID transaction is possible across two separate databases (loans-service and library-service), so the flow was inverted: copies are updated in library-service first, then the loan is created/updated in loans-service. If the second step fails, a compensating call reverts the copies update — a manually orchestrated Saga with compensating action. The compensating call uses `context.Background()` instead of the original request context, since the original context could already be cancelled/expired and the rollback still needs to run | If the compensating call itself fails, the system is left inconsistent with no automatic retry — currently mitigated only by logging for manual reconciliation. Production fix: outbox pattern (persist the compensation as an event in loans-service's local transaction, retried by a background worker until success) |
+| TypeORM `synchronize: true` | Used instead of migrations for faster iteration within the time-boxed evaluation | Production: `migration:generate` + `migration:run` with versioned migration files |
+| HTTP instead of gRPC | Kept for simplicity | gRPC would be the natural next step for lower latency and strongly-typed contracts via protobuf |
+| Unit tests over integration tests | Integration tests require a running database; business logic was covered with unit tests instead, given the time constraint | One exception, see race condition below |
+| Rate limiting / Frontend / Kubernetes | Out of scope — rate limiting was an optional bonus item; frontend/Kubernetes explicitly excluded by the assignment | — |
+
+### Known limitations (found during testing, not resolved due to time)
+
+| Item | What happens | Why it wasn't resolved | Production fix |
+|------|----------------|--------------------------|--------------------|
+| TOCTOU race condition on available copies | Two concurrent loan requests for the same book with 1 copy left can both pass the `copiasDisponibles > 0` check before either decrements the counter | Found during manual testing, not in the original plan. Not verified with `go test -race` — Go's race detector catches memory races between goroutines in one process, not this kind of database-level race across separate HTTP requests. Correct verification requires a concurrency test (N parallel requests, assert only 1 succeeds), not implemented before submission due to time; planned as a follow-up | Atomic conditional update: `UPDATE books SET copias_disponibles = copias_disponibles - 1 WHERE id = $1 AND copias_disponibles > 0`, checking `RowsAffected() == 0` to reject when no copies are available |
+| Loan ownership restriction | `GET /loans/users/:userId` doesn't validate that the caller is that user or an admin — any authenticated user can list another user's loans | Not an explicit requirement for Servicio B (it has no auth of its own — that's Servicio A's responsibility), but surfaced as a gap in manual testing; no time to add the authorization check | Servicio A should derive `userId` from the JWT instead of trusting the path parameter, or validate caller identity/role before proxying to loans-service |

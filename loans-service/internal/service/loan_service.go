@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log"
 
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
 )
@@ -42,7 +43,10 @@ func (s *LoanService) CreateLoan(ctx context.Context, req model.CreateLoanReques
 
 	loan, err := s.repository.Create(ctx, req)
 	if err != nil {
-		s.libraryClient.UpdateCopies(context.Background(), req.BookID, CopiesActionIncrement)
+		if cErr := s.libraryClient.UpdateCopies(context.Background(), req.BookID, CopiesActionIncrement); cErr != nil {
+			log.Printf("CRITICAL: compensation failed for book %d, user %d: %v (original error: %v)", req.BookID, req.UserID, cErr, err)
+			// actual copies count is now unknown without manual reconciliation
+		}
 		return nil, err
 	}
 	return loan, nil
@@ -64,7 +68,10 @@ func (s *LoanService) BookReturned(ctx context.Context, loanID int) (*model.Loan
 
 	returned, err := s.repository.UpdateStatus(ctx, loanID, StatusReturned)
 	if err != nil {
-		s.libraryClient.UpdateCopies(context.Background(), loan.BookID, CopiesActionDecrement)
+		if cErr := s.libraryClient.UpdateCopies(context.Background(), loan.BookID, CopiesActionDecrement); cErr != nil {
+			log.Printf("CRITICAL: compensation failed for loan %d, book %d: %v (original error: %v)", loanID, loan.BookID, cErr, err)
+			// actual copies count is now unknown without manual reconciliation
+		}
 		return nil, err
 	}
 
