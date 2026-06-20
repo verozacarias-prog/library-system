@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"errors"
 
-	"github.com/verozacarias-prog/library-system/loans-service/internal/clients"
 	"github.com/verozacarias-prog/library-system/loans-service/internal/model"
 )
 
@@ -35,24 +33,17 @@ func NewLoanService(repo LoanRepository, libraryClient BookService) *LoanService
 
 func (s *LoanService) CreateLoan(ctx context.Context, req model.CreateLoanRequest) (*model.Loan, error) {
 	if _, err := s.libraryClient.ValidateBook(ctx, req.BookID); err != nil {
-		switch {
-		case errors.Is(err, clients.ErrBookNotFound):
-			return nil, ErrBookNotFound
-		case errors.Is(err, clients.ErrNoCopiesAvailable):
-			return nil, ErrNoCopiesAvailable
-		default:
-			return nil, ErrLibraryServiceUnavailable
-		}
+		return nil, err
 	}
 
 	if err := s.libraryClient.UpdateCopies(ctx, req.BookID, CopiesActionDecrement); err != nil {
-		return nil, ErrLibraryServiceUnavailable
+		return nil, ErrUpdateCopies
 	}
 
 	loan, err := s.repository.Create(ctx, req)
 	if err != nil {
 		s.libraryClient.UpdateCopies(context.Background(), req.BookID, CopiesActionIncrement)
-		return nil, err
+		return nil, ErrUpdateCopies
 	}
 	return loan, nil
 }
@@ -68,13 +59,13 @@ func (s *LoanService) BookReturned(ctx context.Context, loanID int) (*model.Loan
 	}
 
 	if err := s.libraryClient.UpdateCopies(ctx, loan.BookID, CopiesActionIncrement); err != nil {
-		return nil, ErrLibraryServiceUnavailable
+		return nil, ErrUpdateCopies
 	}
 
 	returned, err := s.repository.UpdateStatus(ctx, loanID, StatusReturned)
 	if err != nil {
 		s.libraryClient.UpdateCopies(context.Background(), loan.BookID, CopiesActionDecrement)
-		return nil, err
+		return nil, ErrUpdateCopies
 	}
 
 	return returned, nil
