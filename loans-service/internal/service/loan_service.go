@@ -37,7 +37,7 @@ func (s *LoanService) CreateLoan(ctx context.Context, req model.CreateLoanReques
 	}
 
 	if err := s.libraryClient.UpdateCopies(ctx, req.BookID, CopiesActionDecrement); err != nil {
-		return nil, ErrUpdateCopies
+		return nil, err
 	}
 
 	loan, err := s.repository.Create(ctx, req)
@@ -59,7 +59,7 @@ func (s *LoanService) BookReturned(ctx context.Context, loanID int) (*model.Loan
 	}
 
 	if err := s.libraryClient.UpdateCopies(ctx, loan.BookID, CopiesActionIncrement); err != nil {
-		return nil, ErrUpdateCopies
+		return nil, err
 	}
 
 	returned, err := s.repository.UpdateStatus(ctx, loanID, StatusReturned)
