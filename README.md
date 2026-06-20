@@ -115,6 +115,14 @@ All requests go through **library-service** on port 3000. loans-service (port 80
 | GET | `/health` | None | library-service health check (port 3000) |
 | GET | `/health` | None | loans-service health check (port 8081 direct) |
 
+### API Documentation (Swagger)
+
+Once the service is running, the interactive Swagger UI is available at:
+
+```
+http://localhost:3000/api
+```
+
 ---
 
 ## Complete Flow Example
