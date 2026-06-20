@@ -5,8 +5,10 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 
-
+@ApiTags('books')
+@ApiBearerAuth()
 @Controller('books')
 export class BooksController {
     constructor(private readonly booksService: BooksService) { }
@@ -18,6 +20,11 @@ export class BooksController {
         return this.booksService.create(data);
     }
 
+    @ApiQuery({ name: 'author', required: false })
+    @ApiQuery({ name: 'genre', required: false })
+    @ApiQuery({ name: 'available', required: false, type: Boolean })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
     @Get()
     findAll(
         @Query('author') author?: string,
