@@ -1,24 +1,15 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity('users')
-export class User {
+export class UserResponseDto {
     @ApiProperty({ example: 1 })
-    @PrimaryGeneratedColumn()
     id: number;
 
     @ApiProperty({ example: 'Jane Doe' })
-    @Column()
     name: string;
 
     @ApiProperty({ example: 'jane@example.com' })
-    @Column({ unique: true })
     email: string;
 
-    @Column()
-    password: string;
-
     @ApiProperty({ enum: ['user', 'admin'], example: 'user' })
-    @Column({ default: 'user' })
     role: string;
 }
