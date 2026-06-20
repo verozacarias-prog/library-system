@@ -116,6 +116,68 @@ All requests go through **library-service** on port 3000. loans-service (port 80
 
 ---
 
+## Complete Flow Example
+
+Step-by-step curl commands for the full loan lifecycle.
+
+### 1. Login as admin
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@library.com","password":"adminpass"}' \
+  | jq -r '.access_token')
+```
+
+### 2. Check a book (no auth required)
+
+```bash
+curl -s http://localhost:3000/books/1 | jq '{id,title,author,available_copies}'
+# {"id":1,"title":"The Go Programming Language","author":"Alan Donovan","available_copies":3}
+```
+
+### 3. Create a loan
+
+```bash
+curl -s -X POST http://localhost:3000/loans \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":1,"book_id":1}' | jq .
+# {"id":1,"user_id":1,"book_id":1,"loaned_at":"...","returned_at":null,"status":"active"}
+```
+
+### 4. Verify copies decremented
+
+```bash
+curl -s http://localhost:3000/books/1 | jq .available_copies
+# 2  (was 3)
+```
+
+### 5. Return the book
+
+```bash
+curl -s -X PATCH http://localhost:3000/loans/1 \
+  -H "Authorization: Bearer $TOKEN" | jq .
+# {"id":1,"user_id":1,"book_id":1,"loaned_at":"...","returned_at":"...","status":"returned"}
+```
+
+### 6. Verify copies restored
+
+```bash
+curl -s http://localhost:3000/books/1 | jq .available_copies
+# 3  (restored)
+```
+
+### 7. View loan history
+
+```bash
+curl -s http://localhost:3000/loans/users/1/history \
+  -H "Authorization: Bearer $TOKEN" | jq .
+# [{"id":1,"status":"returned",...}]
+```
+
+---
+
 ## End-to-End Testing
 
 All tests run against `http://localhost:3000` after `docker compose up --build`.
@@ -130,10 +192,6 @@ chmod +x scripts/seed.sh
 ```
 
 Expected output: 3 users created, 4 books created, 3 loans created.
-
-```
-<!-- EVIDENCE: paste seed.sh output here -->
-```
 
 ### 2. Verify database state
 
@@ -152,10 +210,6 @@ docker exec -it library-system-postgres-loans-1 psql -U postgres -d loans_db \
   -c "SELECT * FROM loans;"
 ```
 
-```
-<!-- EVIDENCE: paste psql output here -->
-```
-
 ### 3. Run CRUD and validation tests (books & users)
 
 Tests UPDATE and DELETE operations for books and users, covering all validation edge cases (invalid fields, missing auth, wrong role, not found, etc.).
@@ -165,11 +219,7 @@ chmod +x scripts/test_update_delete.sh
 ./scripts/test_update_delete.sh
 ```
 
-Expected: each request shows its HTTP status and response body. All status codes match expectations.
-
-```
-<!-- EVIDENCE: paste test_update_delete.sh output here -->
-```
+Expected: each request shows its HTTP status and response body. All status codes match expectations. Captured expected responses are in `scripts/test_results_update_delete.json`.
 
 ### 4. Run full functional tests (auth, loans, error cases)
 
@@ -188,9 +238,7 @@ Expected highlights:
 - Missing token returns `401 Unauthorized`
 - Non-admin creating a book returns `403 Forbidden`
 
-```
-<!-- EVIDENCE: paste test_full.sh output here -->
-```
+Captured expected responses are in `scripts/test_results_full.json`.
 
 ---
 
