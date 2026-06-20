@@ -1,0 +1,245 @@
+# Loans
+docker exec -it library-system-postgres-loans-1 psql -U postgres -d loans_db -c "SELECT * FROM loans;"
+zsh: command not found: #
+ id |       name        |      email      | role  
+----+-------------------+-----------------+-------
+  1 | Verónica Zacarias | vero@test.com   | admin
+  2 | Carlos Ruiz       | carlos@test.com | admin
+  3 | Lector Perez      | lector@test.com | user
+(3 rows)
+
+
+What's next:
+    Try Docker Debug for seamless, persistent debugging tools in any container or image → docker debug library-system-postgres-library-1
+    Learn more at https: //docs.docker.com/go/debug-cli/
+ id |          title           |      author       | available_copies 
+----+--------------------------+-------------------+------------------
+  4 | El nombre de la rosa     | Umberto Eco       |                4
+  1 | Clean Code               | Robert Martin     |                2
+  2 | The Pragmatic Programmer | David Thomas      |                1
+  3 | Sapiens                  | Yuval Noah Harari |                4
+(4 rows)
+
+
+What's next:
+    Try Docker Debug for seamless, persistent debugging tools in any container or image → docker debug library-system-postgres-library-1
+    Learn more at https: //docs.docker.com/go/debug-cli/
+zsh: command not found: #
+ id | user_id | book_id |         loaned_at          | returned_at | status 
+----+---------+---------+----------------------------+-------------+--------
+  1 |       1 |       1 | 2026-06-19 19: 19: 32.198328 |             | active
+  2 |       2 |       2 | 2026-06-19 19: 19: 32.262022 |             | active
+  3 |       3 |       3 | 2026-06-19 19: 19: 32.317602 |             | active
+(3 rows)
+
+
+=== UPDATE BOOK ===
+--- Caso feliz: actualizar título (admin) ---
+{
+  "id": 1,
+  "title": "Clean Code - Updated Edition",
+  "author": "Robert Martin",
+  "isbn": "9780132350884",
+  "year": 2008,
+  "genre": "tech",
+  "available_copies": 2
+}
+
+--- Caso feliz: actualizar copias ---
+{
+  "id": 2,
+  "title": "The Pragmatic Programmer",
+  "author": "David Thomas",
+  "isbn": "9780135957059",
+  "year": 2019,
+  "genre": "tech",
+  "available_copies": 10
+}
+
+--- Error: libro que no existe (404) ---
+{
+  "message": "Book 9999 not found",
+  "error": "Not Found",
+  "statusCode": 404
+}
+
+--- Error: sin token (401) ---
+{
+  "message": "Unauthorized",
+  "statusCode": 401
+}
+
+--- Error: usuario normal (403) ---
+{
+  "message": "You do not have permission to perform this action",
+  "error": "Forbidden",
+  "statusCode": 403
+}
+
+--- Error: campo desconocido (400) ---
+{
+  "message": [
+    "property campo_inventado should not exist"
+  ],
+  "error": "Bad Request",
+  "statusCode": 400
+}
+
+--- Error: copias negativas (400) ---
+{
+  "message": [
+    "available_copies must not be less than 0"
+  ],
+  "error": "Bad Request",
+  "statusCode": 400
+}
+
+--- Error: año futuro (400) ---
+{
+  "message": [
+    "year must not be greater than 2026"
+  ],
+  "error": "Bad Request",
+  "statusCode": 400
+}
+
+=== DELETE BOOK ===
+--- Error: sin token (401) ---
+{
+  "message": "Unauthorized",
+  "statusCode": 401
+}
+
+--- Error: usuario normal (403) ---
+{
+  "message": "You do not have permission to perform this action",
+  "error": "Forbidden",
+  "statusCode": 403
+}
+
+--- Error: libro que no existe (404) ---
+{
+  "message": "Book 9999 not found",
+  "error": "Not Found",
+  "statusCode": 404
+}
+
+--- Caso feliz: eliminar libro 4 (admin) ---
+204
+
+--- Verificar que ya no existe ---
+{
+  "message": "Book 4 not found",
+  "error": "Not Found",
+  "statusCode": 404
+}
+
+=== UPDATE USER ===
+--- Caso feliz: admin actualiza nombre de usuario 3 ---
+{
+  "id": 3,
+  "name": "Lector Actualizado",
+  "email": "lector@test.com",
+  "role": "user"
+}
+
+--- Caso feliz: admin cambia rol de usuario 3 a admin ---
+{
+  "id": 3,
+  "name": "Lector Actualizado",
+  "email": "lector@test.com",
+  "role": "admin"
+}
+
+--- Caso feliz: admin revierte rol a user ---
+{
+  "id": 3,
+  "name": "Lector Actualizado",
+  "email": "lector@test.com",
+  "role": "user"
+}
+
+--- Error: usuario normal intenta cambiar su propio rol (403) ---
+{
+  "message": "Only admins can change roles",
+  "error": "Forbidden",
+  "statusCode": 403
+}
+
+--- Error: rol inválido (400) ---
+{
+  "message": [
+    "role must be one of the following values: user, admin"
+  ],
+  "error": "Bad Request",
+  "statusCode": 400
+}
+
+--- Error: usuario que no existe (404) ---
+{
+  "message": "User 9999 not found",
+  "error": "Not Found",
+  "statusCode": 404
+}
+
+--- Error: sin token (401) ---
+{
+  "message": "Unauthorized",
+  "statusCode": 401
+}
+
+--- Error: campo desconocido (400) ---
+{
+  "message": [
+    "property campo_raro should not exist"
+  ],
+  "error": "Bad Request",
+  "statusCode": 400
+}
+
+=== DELETE USER ===
+--- Error: sin token (401) ---
+{
+  "message": "Unauthorized",
+  "statusCode": 401
+}
+
+--- Error: usuario normal (403) ---
+{
+  "message": "You do not have permission to perform this action",
+  "error": "Forbidden",
+  "statusCode": 403
+}
+
+--- Error: usuario que no existe (404) ---
+{
+  "message": "User 9999 not found",
+  "error": "Not Found",
+  "statusCode": 404
+}
+
+--- Caso feliz: admin elimina usuario 2 (carlos) ---
+204
+
+--- Verificar que ya no existe ---
+{
+  "message": "User 2 not found",
+  "error": "Not Found",
+  "statusCode": 404
+}
+
+--- Verificar usuarios restantes ---
+[
+  {
+    "id": 1,
+    "name": "Verónica Zacarias",
+    "email": "vero@test.com",
+    "role": "admin"
+  },
+  {
+    "id": 3,
+    "name": "Lector Actualizado",
+    "email": "lector@test.com",
+    "role": "user"
+  }
+]

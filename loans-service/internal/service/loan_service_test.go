@@ -47,7 +47,7 @@ func TestCreateLoan_BookNotAvailable(t *testing.T) {
 	loan, err := svc.CreateLoan(ctx, req)
 
 	assert.Nil(t, loan)
-	assert.ErrorIs(t, err, service.ErrNoCopiesAvailable)
+	assert.ErrorIs(t, err, clients.ErrNoCopiesAvailable)
 	mockRepo.AssertNotCalled(t, "Create")
 	mockClient.AssertExpectations(t)
 }
