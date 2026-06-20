@@ -243,6 +243,20 @@ Captured expected responses are in `scripts/test_results_full.txt`.
 
 ---
 
+## CI
+
+GitHub Actions runs the unit test suite for both services on every push and pull request.
+
+```
+.github/workflows/ci.yml
+├── test-library-service   → npm ci && npm test  (Node.js 20)
+└── test-loans-service     → go test ./internal/...  (Go 1.21)
+```
+
+No database or Docker is required — all tests use mocks.
+
+---
+
 ## Technical Decisions
 
 ### loans-service (Go)
@@ -280,6 +294,9 @@ Instead of a `/loans/:id/return` verb-in-URL pattern, a `PATCH /loans/:id` was u
 **Inter-service authentication with short-lived JWT**
 loans-service generates a JWT signed with the shared `JWT_SECRET` (`role: "service"`, 1-minute expiry) on each outbound call to library-service. library-service validates it with the standard `JwtAuthGuard` — no new authentication mechanism needed. The short expiry limits the blast radius of a leaked token in transit.
 
+**library-service unavailable → 503**
+Network errors from `http.Client.Do()` are wrapped with `ErrLibraryServiceUnavailable` using `fmt.Errorf("%w: %w", ...)`, so `errors.Is()` can unwrap them at the handler layer and return a clean `503 Service Unavailable` instead of a raw error string.
+
 **Distributed transaction handling**
 Loan creation and return both involve two systems (loans DB + library-service copy count). To maintain consistency:
 - On **loan creation**: copies are decremented first, then the loan is persisted. If the DB insert fails, a compensating increment call is made to restore the count.
@@ -307,7 +324,10 @@ TypeORM automatically creates/updates tables based on entity definitions. Approp
 `@Roles('admin')` decorator stores metadata on the endpoint. `RolesGuard` reads that metadata via `Reflector` and compares it against the role in the JWT payload. Endpoints without `@Roles` are accessible to any authenticated user. Only admins can change a user's role via `PATCH /users/:id`.
 
 **Input validation with class-validator**
-All endpoints use typed DTOs with `class-validator` decorators. A global `ValidationPipe` (whitelist + forbidNonWhitelisted) is applied in `main.ts`, rejecting unknown fields and validating types at the boundary.
+All endpoints use typed DTOs with `class-validator` decorators. A global `ValidationPipe` (whitelist + forbidNonWhitelisted) is applied in `main.ts`, rejecting unknown fields and validating types at the boundary. This includes the loans proxy — `POST /loans` validates `user_id` and `book_id` via `CreateLoanDto` before forwarding to loans-service.
+
+**Atomic copy update**
+`updateCopies` uses a single `UPDATE ... SET available_copies = available_copies + $delta WHERE available_copies + $delta >= 0 RETURNING *` query instead of a read-modify-write cycle. This eliminates the race condition where two concurrent loan requests could both read the same copy count and produce an incorrect result.
 
 **Passwords hashed with bcrypt (salt rounds: 10)**
 Passwords are never stored or returned in plain text. The `Omit<User, 'password'>` TypeScript type ensures the password field is excluded at the type level from all service responses.
@@ -333,6 +353,8 @@ npm test
 **loans-service:** unit tests — service layer (CreateLoan happy path, book not available, BookReturned, GetActiveLoans) and handler layer (CreateLoan 201, invalid body 400). Mocks used for repository and LibraryClient — no database required.
 
 **library-service:** unit tests — BooksService (create, findOne not found, updateCopies) and AuthService (valid login, user not found, wrong password). Mocks used for TypeORM repository and JwtService.
+
+Tests also run automatically on every push via GitHub Actions (see [CI](#ci) section).
 
 ---
 
@@ -377,6 +399,9 @@ The assessment specifies "read and their loans" for regular users. This was inte
 
 ```
 library-system/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                # GitHub Actions — runs tests on push/PR
 ├── docker-compose.yml
 ├── .env.example
 ├── scripts/
@@ -404,7 +429,9 @@ library-system/
 │   │   │       └── update-user.dto.ts
 │   │   ├── loans/                    # proxy to loans-service
 │   │   │   ├── loans.module.ts
-│   │   │   └── loans.controller.ts
+│   │   │   ├── loans.controller.ts
+│   │   │   └── dto/
+│   │   │       └── create-loan.dto.ts
 │   │   └── auth/
 │   │       ├── auth.module.ts
 │   │       ├── auth.service.ts
